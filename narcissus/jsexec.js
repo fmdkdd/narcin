@@ -370,7 +370,7 @@ Narcissus.interpreter = (function() {
         moduleInstances.clear();
         globalStaticEnv = new StaticEnv();
 
-        let names = Object.getOwnPropertyNames(hostProxy);
+        names = Object.getOwnPropertyNames(hostProxy);
         for (let i = 0, n = names.length; i < n; i++) {
             globalStaticEnv.bind(names[i], new Def());
         }
