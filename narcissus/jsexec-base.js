@@ -616,9 +616,8 @@ Narcissus.interpreter = (function() {
       } else {
         if (!matchDefault)          // not defaulting, skip for now
           continue;
-        u = s;                      // force match to do default
       }
-      if (u === s) {
+      if (matchDefault || u === s) {
         for (;;) {                  // this loop exits switch_loop
           if (t.statements.children.length) {
             try {
