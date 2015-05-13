@@ -52,6 +52,7 @@
  * an extra level of prototype-based delegation.
  */
 
+/*global Narcissus, print, putstr, readline, snarf, assertEq, uneval */
 Narcissus.interpreter = (function() {
 
   var parser = Narcissus.parser;
