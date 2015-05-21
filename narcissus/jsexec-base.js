@@ -54,6 +54,8 @@
 
 /*global Narcissus, print, putstr, readline, snarf, assertEq, uneval */
 Narcissus.interpreter = (function() {
+  var ___ = {};
+  with (___) {
 
   var parser = Narcissus.parser;
   var definitions = Narcissus.definitions;
@@ -94,23 +96,10 @@ Narcissus.interpreter = (function() {
       this.thisObject = globalMirror;
     }
 
-    runExecutionContextHooks(this, type);
   }
 
-  ExecutionContext.hooks = [];
-
-  function runExecutionContextHooks(x, type) {
-    ExecutionContext.hooks.forEach(h => {
-      h(x, type);
-    });
-  }
-
-  function addExecutionContextHook(fn) {
-    ExecutionContext.hooks.push(fn);
-  }
-
-  function getContext(name) {
-    return ExecutionContext.current && ExecutionContext.current[name];
+  function getCurrentExecutionContext(name) {
+    return ExecutionContext.current;
   }
 
   function isStackOverflow(e) {
@@ -293,11 +282,7 @@ Narcissus.interpreter = (function() {
     reflectClass('Function', FOp);
 
     if (!('__call__' in Fp)) {
-      definitions.defineProperty(Fp, "__call__", function(t, a ,x) {
-        // Make an indirect reference to FpCall to allow instrumentation to
-        // change its value.
-        return Narcissus.interpreter.FpCall.apply(this, arguments);
-      }, true, true, true);
+      definitions.defineProperty(Fp, "__call__", FpCall, true, true, true);
       definitions.defineProperty(REp, "__call__", REpCall, true, true, true);
       definitions.defineProperty(Fp, "__construct__", FpConstruct,
                                  true, true, true);
@@ -485,14 +470,6 @@ Narcissus.interpreter = (function() {
   }
 
   var executeNode = {};
-
-  function addExecuteNode(...args) {
-    var fn = args.slice(-1)[0];
-    var types = args.slice(0,-1);
-    types.forEach(t => {
-      executeNode[t] = fn;
-    });
-  }
 
   function execute(n, x) {
     if (n.type in executeNode) {
@@ -1496,7 +1473,7 @@ Narcissus.interpreter = (function() {
     ExecutionContext.current = x;
     for (;;) {
       x.result = undefined;
-      putstr(Narcissus.interpreter.repl_prompt);
+      putstr(repl_prompt);
       var src = readline();
 
       // If readline receives EOF it returns null.
@@ -1541,8 +1518,8 @@ Narcissus.interpreter = (function() {
     try {
       thunk();
     } catch (e) {
-      // print(e.fileName + ":" + e.lineNumber + ": " + e.name + ": " + e.message);
-      // printStackTrace(e.stack);
+      print(e.fileName + ":" + e.lineNumber + ": " + e.name + ": " + e.message);
+      printStackTrace(e.stack);
       print(e.message);
       return false;
     }
@@ -1552,41 +1529,36 @@ Narcissus.interpreter = (function() {
   return {
     // resetEnvironment wipes any properties added externally to global,
     // but properties added to globalBase will persist.
-    global: global,
-    globalBase: globalBase,
-    resetEnvironment: resetEnvironment,
-    populateEnvironment: populateEnvironment,
-    evaluate: evaluate,
+    global,
+    globalBase,
+    resetEnvironment,
+    populateEnvironment,
+    evaluate,
     getValueHook: null,
-    repl: repl,
-    test: test,
+    repl,
+    test,
 
-    addExecutionContextHook: addExecutionContextHook,
-    getContext: getContext,
-    addExecuteNode: addExecuteNode,
+    // Exposed functions
+    // FIXME: Should be everything
+    _: {ExecutionContext,
+        getCurrentExecutionContext,
+        getValue,
+        Reference,
+        executeNode,
+        execute,
+        global,
+        globalBase,
+        isObject,
+        toObject,
+        isPrimitive,
+        Activation,
+        BREAK_SIGNAL,
+        CONTINUE_SIGNAL
+       },
 
-    executeNode: executeNode,
-    execute: execute,
-    ExecutionContext: ExecutionContext,
-    Reference: Reference,
-    isPrimitive: isPrimitive,
-    Activation: Activation,
-    hasDirectProperty: hasDirectProperty,
-    BREAK_SIGNAL: BREAK_SIGNAL,
-    CONTINUE_SIGNAL: CONTINUE_SIGNAL,
-    RETURN_SIGNAL: RETURN_SIGNAL,
-    END_SIGNAL: END_SIGNAL,
-    GLOBAL_CODE: GLOBAL_CODE,
-    EVAL_CODE: EVAL_CODE,
-    FUNCTION_CODE: FUNCTION_CODE,
-    MODULE_CODE: MODULE_CODE,
-    isSignal: isSignal,
-    isObject: isObject,
-    toObject: toObject,
-    FpCall: FpCall,
-    newFunction: newFunction,
-    thunk: thunk,
-    repl_prompt: repl_prompt
+    // Instrumentation scope
+    ___
   };
 
+  } // End of with(I)
 }());
