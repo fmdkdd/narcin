@@ -279,7 +279,7 @@ Narcissus.interpreter = (function() {
     global.String.fromCharCode = String.fromCharCode;
 
     // Connect Function.prototype and Function.prototype.constructor in global.
-    reflectClass('Function', FOp);
+    reflectClass('Function', FunctionObject.prototype);
 
     if (!('__call__' in Fp)) {
       definitions.defineProperty(Fp, "__call__", FpCall, true, true, true);
@@ -1226,7 +1226,7 @@ Narcissus.interpreter = (function() {
     return p;
   }
 
-  var FOp = FunctionObject.prototype = {
+  FunctionObject.prototype = {
 
     // Internal methods.
     __call__: function (t, a, x) {
