@@ -1517,11 +1517,13 @@ Narcissus.interpreter = (function() {
   function test(thunk) {
     try {
       thunk();
-    } catch (e) {
+    } catch (e if e instanceof Error) {
       print(e.fileName + ":" + e.lineNumber + ": " + e.name + ": " + e.message);
       printStackTrace(e.stack);
       print(e.message);
       return false;
+    } catch (e) {
+      print(e);
     }
     return true;
   }
