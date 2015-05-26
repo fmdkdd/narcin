@@ -1546,6 +1546,7 @@ Narcissus.interpreter = (function() {
         getCurrentExecutionContext,
         getValue,
         Reference,
+        FunctionObject,
         executeNode,
         execute,
         global,
