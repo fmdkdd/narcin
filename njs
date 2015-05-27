@@ -9,17 +9,16 @@ from subprocess import *
 from optparse import OptionParser
 
 THIS_DIR = os.path.dirname(__file__)
-SPIDERMONKEY_DIR = os.path.abspath(os.path.join(THIS_DIR, 'spidermonkey'))
+SHELL_DIR = os.path.abspath(os.path.join(THIS_DIR, 'shells'))
+DEFAULT_SHELL = os.path.abspath(os.path.join(SHELL_DIR, 'raw.js'))
+LAYER_INIT = os.path.abspath(os.path.join(SHELL_DIR, 'init.js'))
+LAYER_LOCK_ENV = os.path.abspath(os.path.join(SHELL_DIR, 'lock-env.js'))
+
 
 if 'NJS_SHELL' in os.environ:
     js_cmd = os.path.abspath(os.environ['NJS_SHELL'])
 else:
     js_cmd = os.path.abspath(os.path.join(THIS_DIR, 'js'))
-
-if 'NARC_SHELL' in os.environ:
-    narc_shell = os.path.abspath(os.environ['NARC_SHELL'])
-else:
-    narc_shell = os.path.join(SPIDERMONKEY_DIR, "shell-raw.js")
 
 def handler(signum, frame):
     print ''
@@ -31,7 +30,9 @@ signal.signal(signal.SIGINT, handler)
 if __name__ == '__main__':
     op = OptionParser(usage='%prog [TEST-SPECS]')
     op.add_option('-f', '--file', dest='js_files', action='append',
-            help='JS file to load', metavar='FILE')
+            help='JS file to load in Narcissus', metavar='FILE')
+    op.add_option('-F', '--file-meta', dest='js_files_meta', action='append',
+                  help='JS file to load before executing Narcissus', metavar='FILE')
     op.add_option('-e', '--expression', dest='js_exps', action='append',
             help='JS expression to evaluate')
     op.add_option('-i', '--interactive', dest='js_interactive', action='store_true',
@@ -48,6 +49,8 @@ if __name__ == '__main__':
             help='use experimental paren-free syntax')
     op.add_option('-d', '--desugar', dest='js_desugar', action='store_true',
             help='desugar SpiderMonkey language extensions')
+    op.add_option('-l', '--layer', dest='js_layers', action='append',
+            help='Layers to load (facets, flowr, trace)')
 
     (options, args) = op.parse_args()
 
@@ -79,7 +82,21 @@ if __name__ == '__main__':
     if (not options.js_exps) and (not options.js_files):
         options.js_interactive = True
 
-    argv = [js_cmd, '-f', narc_shell]
+    argv = [js_cmd]
+
+    if options.js_files_meta:
+        for file in options.js_files_meta:
+            argv += ['-f', file]
+
+    if options.js_layers:
+        argv += ['-f', LAYER_INIT]
+        argv += ['-f', os.path.join(SHELL_DIR, 'layer-base.js')]
+        for file in options.js_layers:
+            argv += ['-f', (os.path.join(SHELL_DIR, 'layer-' + file + '.js'))]
+        argv += ['-f', LAYER_LOCK_ENV]
+
+    if not options.js_files_meta and not options.js_layers:
+        argv += ['-f', DEFAULT_SHELL]
 
     if options.js_exps_meta:
         argv += ['-e', cmd]

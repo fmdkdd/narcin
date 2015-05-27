@@ -1,6 +1,0 @@
-#!/bin/sh
-
-root=/home/fmarch12/Utils/ZaphodFacets/zaphod/chrome/content
-shell=$root/spidermonkey/shell-facets.js
-
-env NARC_SHELL=$shell $root/njs "$@"
