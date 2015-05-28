@@ -1,0 +1,1032 @@
+#+PROPERTY: header-args :results output :noweb yes
+
+Instrumenting Narcissus for dynamic analyses in an elegant way.
+
+Targeted instrumentations:
+- faceted evaluation
+- FlowR
+- Theory of Information Labels
+- Call graph
+
+Also desirable:
+- ES5 Strict mode
+- Google Strong mode
+
+* How Narcissus is instrumented for faceted evaluation
+** Extension of ExecutionContext
+The ExecutionContext object is modified to hold the current program counter
+=pc=.
+
+#+BEGIN_SRC
+function ExecutionContext(type, pc, version) {
+  [...]
+  this.pc = pc;
+#+END_SRC
+
+Though it seems at most one instance of ExecutionContext is used for executing
+code.
+
+#+BEGIN_SRC
+ExecutionContext.prototype = {
+  execute: function(n) {
+  var prev = ExecutionContext.current;
+  ExecutionContext.current = this;
+  try {
+    execute(n, this);
+  } finally {
+    ExecutionContext.current = prev;
+  }
+#+END_SRC
+
+*** Modular change
+ExecutionContext is buried inside the closure of Narcissus.interpreter.  Not
+much we can do to extract this change while leaving the interpreter untouched.
+
+** Extension to globalBase
+globalBase serves as a base for the global object that will be exposed to
+evaluated scripts.
+
+ZaphodFacets adds a few constructs for manipulating faceted values in demo
+scripts.
+
+#+BEGIN_SRC
+  alert: function(msg){
+  exportValue: function(fv) {
+  cloak
+  isFacetedValue
+  getView:
+  getAuth
+  getUnAuth
+#+END_SRC
+
+These are facet-specific.  Standard API methods from Array and String objects
+are added, but Strings are instrumented to create faceted values.
+
+#+BEGIN_SRC
+  var newStr = evaluateEach(s, function(s,x) {
+    // Called as function or constructor: convert argument to string type.
+    return (argSpecified ? "" + s : "");
+  }, ExecutionContext.current);
+#+END_SRC
+
+Later in the file, the interpreter added String.fromCharCode to the exposed
+global object from the host String object.  This is commented out by the
+instrumentation, since an instrumented String.fromCharCode is used instead.
+
+The interpreter defines methods and the global environment used for client code
+at the same time.  =resetEnvirnoment()= is called after its definition.  This
+locks down the ability to extend =globalBase= at a later time.  Also, all the
+=reflectClass= calls (which end up populating the =global= client object) are at
+the top level of the module.
+
+*** Modular change
+Do not call =resetEnvironment= right away.  Give that as a responsibility to the
+caller.
+
+Put all global-constructing code in a function =populateEnvironment= which will
+also be called by the caller to Narcissus, leaving room for extending =global=
+before it is sealed.
+
+** Extension to =execute=
+The =execute= function is a long switch where each case deals with a specific
+AST node.
+
+In the instrumentation, the behavior of each case is reified as a function, in
+order to be able to be called on all facets.
+
+#+BEGIN_SRC
+v = evaluateEach(t, function(t,x) {
+  return !(t instanceof Reference) || delete t.base[t.propertyName];
+}, x);
+#+END_SRC
+
+This pattern alone is the cause of more than half of the changes to the code.
+
+*** Modular change
+The reification of each switch case to a function is a necessary step.
+
+=evaluateEach= is used to recursively call the switch case function on each
+facets.  The base case is a raw value.  Since it’s only a branch between raw
+values and faceted values, we can dispatch on the type instead.
+* Comparing Narcisuss-base with Narcissus-raw
+The test262 suite does not seem to handle Narcissus correctly.  Even
+Narcissus-raw produces errors that are registered as a passed test.
+
+But even if they were correctly handled by test262, comparing the number of
+tests passed/failed is not equivalence.
+
+We should run raw and base on test262, and compare their outputs for each test.
+
+: ./jstests.py --xul-info=:: -o -j 1 --no-progress JS test262/
+
+After resolving some bugs (see below), Narcissus-base and Narcissus-raw behave
+*identically* (exact same output from the jstests command above).
+
+** test262/S11.8.4 A2.2 T1
+Narcissus-raw returns:
+: TypeError: can't convert getValue(...) to number
+
+Narcissus-base returns:
+: TypeError: can't convert ({valueOf:{node:{type:FUNCTION, [...]}}}) to number
+
+Although, using their the njs-raw REPL exhibit the latter behavior.  Of course,
+the exposed objects are not identical, since Narcissus-base exposes more stuff,
+like =getContext= etc.
+
+The solution is to make the =node= and =scope= attributes of =FunctionObject=
+non-enumerable, and we get the same result as SpiderMonkey.
+
+However, njs-raw still exhibits a different behavior when called with the test
+shell:
+: ./njs-raw -f ~/Utils/mozilla-central-7913c9392c5f/js/src/tests/shell.js  -f tests/s11.8.4_A2.2_T1.js
+: can't convert getValue(...) to number
+
+But njs-base is coherent:
+: ./njs-base -f ~/Utils/mozilla-central-7913c9392c5f/js/src/tests/shell.js  -f tests/s11.8.4_A2.2_T1.js
+: can't convert ({valueOf:{prototype:{}}, toString:{prototype:{}}}) to number
+
+The plot thickens.  njs-raw exhibits this behavior anytime another file
+containing at least one statement is executed before the test.  Same behavior in
+the REPL.  Side-effect of calling evaluate?
+
+Can’t seem to trace this bug.  Not critical anyway, since both interpreters are
+nearly identical.
+
+By fixing =instanceof= on errors, this difference in behavior does not matter.
+
+** Exceptions are not caught by jstests
+Presumably because =instanceof= tests on exceptions fail in Narcissus:
+: js> Narcissus.interpreter.evaluate('new TypeError instanceof TypeError')
+: false
+
+In SpiderMonkey,
+: js> new TypeError instanceof TypeError
+: true
+
+In fact, =instanceof= seems broken, since it fails on String as well.
+
+In njs-raw, =TypeError= has a =__hasInstance__= field, so the =instanceof= tests
+reduces to a call to this function.
+
+This =__hasInstance__= calls is there because of a =wrapNative=.
+
+In SpiderMonkey,
+: js> TypeError
+: function TypeError() { [native code] }
+
+whereas in Narcissus-base (and raw),
+: njs-base> TypeError
+: function () { return val.apply(hostGlobal, arguments); }
+
+In Narcissus-raw, =TypeError= is actually a proxy, which after a =new= call will
+return a native =TypeError= object.
+: js> Narcissus.interpreter.evaluate('new TypeError') instanceof TypeError
+: true
+
+But the =instanceof= test inside Narcissus will fail, since the right-hand side
+is this anonymous function returned by =wrapNative=, which has a
+=__hasInstance__= field.
+
+Since =hasInstance= short-circuits the =instanceof= mechanism, the
+straightforward solution would be to add a correct =hasInstance= definition for
+=TypeError= and other =Error= constructors.
+
+: TypeError.__hasInstance__ = function(v) { return v instanceof TypeError }
+
+** Function.prototype is erased
+But is still accessible:
+: njs-raw> TypeError.__proto__ === Function.prototype
+: false
+
+: js> TypeError.__proto__ === Function.prototype
+: true
+
+so
+: njs-raw> f = new TypeError.__proto__.constructor()
+: function anonymous() {}
+
+** Ordering of reflectClass calls and instrumentation
+Narcissus-facets needs to change the String object in the global exposed to
+client code.  For this, we can redefine the =String= in =globalBase=, and call
+=resetEnvironment= to reconstruct the client global object.
+
+However, =reflectClass= also uses the =String= from =globalBase=, so
+=reflectClass= should be called /after/ Narcissus-facets has modified the String
+object in =globalBase=.
+
+Problem: =reflectClass= is not idempotent, since a non-configurable property
+(like =prototype=) can only be defined once.
+
+Ideally, =Narcissus.interpreter= should provide a “finalize” function where the
+global environment is created and locked.  Before that happens, instrumentations
+are free to touch =globalBase= and redefine other aspects.
+
+This has two consequences:
+1. Callers of =Narcissus.interpreter= have the responsibility of calling this
+   “finalize” function as well, to ensure the environment is prepared and locked
+   down.
+2. Toggling the instrumentation dynamically becomes more complicated.  Since
+   purging the global object from instrumented objects is non trivial.   But in
+   any case, we can not hope to “unfacet” faceted values; so dynamic toggling of
+   instrumentation only make sense when evaluating new code.
+
+* Comparing Narcissus-base with Narcissus-facets
+Ensuring the instrumentation does not alter the semantics of JS when the program
+counter is empty.
+
+After fixing the bugs below, Narcissus-base and Narcissus-facets have
+*identical* output for the test262 suite.
+
+** Do-while evaluates its condition before the body
+Which does not make any sense under JS semantics, since it breaks a condition
+using side-effects.
+
+The body should be executed once, then we can split the condition if it is a
+faceted value.
+
+For the fix, I rewrote the DO in terms of a WHILE.  Nit: as taught in
+introductory programming classes,
+: do <block> while (<cond>)
+
+is not equivalent to
+: <block> while (cond) <block>
+
+if =block= contains =break= or =continue=.
+
+** Various locale/String length fixes
+The facets instrumentation manages to /fix/ some regressions in Narcissus-base
+and Narcissus-raw.  They all have to do with string length.
+
+For =S8.4_A3.js=, njs-base throws:
+: Test262 error: #1: var __str = "ABCDEFGH"; __str.length === 8. Actual: 0
+
+while njs-facets passes.
+
+Indeed, the =length= attribute for strings is broken on both njs-base and
+njs-raw, but correctly added back in njs-facets.
+
+Easy fix: retrofit the fix from njs-facets to njs-base and njs-raw.
+
+** Unhandled case: condition became more secure
+In the facet instrumentation, loop conditions are split only once.  If in
+subsequent iterations the condition becomes another faceted value, then we
+should split again, and continue the loop for each facet.
+
+Instead, the instrumentation throws.  It seems to me that defining the loop as a
+recursive function would give the answer to how to deal with subsequent faceted
+conditions.
+
+In any case, this is an issue with the faceted evaluation strategy itself, not
+with its instrumentation.
+
+* Running the test262 suite
+After fixing =instanceof=, the errors raised by Narcissus seem to be registered
+as errors by the test runner.  I’m not entirely sure that non-errors are
+correctly read, as “PASSED!” is still printed on the console output for each
+test (false positives).
+
+So, results are to be taken with a grain of salt.
+
+: ./jstests.py --xul-info=:: -o -j 4 JS test262/
+
+| Interpreter              | pass | fail | timeout | skip | time    |
+|--------------------------+------+------+---------+------+---------|
+| Spidermonkey             | 3298 |    0 |       0 |  344 | 47s     |
+| Narcissus-raw    (hooks) | 2581 |  717 |       0 |  344 | 1022.4s |
+| Narcissus-base   (hooks) | 2581 |  717 |       0 |  344 | 952.8s  |
+| Narcissus-facets (hooks) | 2581 |  717 |       0 |  344 | 1111.0s |
+
+Pass/fail numbers are the same for all Narcissus variants, as expected since
+they have the exact same output.  “Hooks” indicate the git tag name when these
+measures where taken.
+
+The times are encouraging, with njs-base being one minute faster on this one
+pass.  Before jumping to conclusions, benchmarks should be done with multiple
+runs to ensure differences are significant.
+
+** Infinite loop in =S12.11_A1_T3.js=
+Seems to be the culprit for non-ending runs.  Happens with njs-raw and njs-base.
+
+The error is relying on strict equality for “forcing” a match with the default
+case.  This fails with =NaN=, which is not strict equal to itself.
+
+The fix is to just use the flag =matchDefault= to know whether to execute the
+default case label or not, rather than relying on strict equality.
+
+** Undefined:undefined: undefined: undefined
+This is the output from the first =print= in =jsexec-base.test= when the caught
+exception is /not/ an exception.
+
+In this case, =BREAK_SIGNAL= and =CONTINUE_SIGNAL= were undefined, because they
+were not correctly exported from jsexec-base.
+
+* Issues
+** The instrumentation is still not modular
+Fixing the infinite loop in switch should not require a change to njs-facets.
+
+At this time, there are a few functions that are copy-pasted into njs-facets
+from njs-base, just to pass the program counter to =getValue=.
+
+*** =getValue= is in the closure
+njs-facets needs to extend =getValue=, but even if we define another function
+=getValue= in njs-facets, there is *no way* to substitute the original
+=getValue= that is inside the closure of all the other functions (most
+importantly: =executeNode= functions).
+
+Closures are a good way to prevent extensions.  In our case, we want to leave
+the definitions of functions such as =getValue= to be open.
+
+The module pattern used to create =Narcissus.interpreter= is the following:
+1. =Narcissus.interpreter= is an object, which has a few methods and objects
+   that are deemed useful to an outsider.  The only exposed part is the public
+   interface.
+2. This object is built inside an IIFE, which is used to avoid polluting the
+   global name space.
+3. This object makes use of inner functions and variables, which are captured by
+   the closures of public functions.
+
+#+BEGIN_SRC js
+I = (function() {
+  var a = 1
+  var b = 2
+
+  function f() { a }
+  function g() { f(b) }
+
+  return { g: g }
+}())
+#+END_SRC
+
+**** Returning a module with all the definitions
+To hide implementation-specific details from outsiders is good practice.
+However, this pattern also prevents any instrumentation because
+implementation-specific details are inaccessible, even if we really wanted to
+access them.
+
+Obviously, the developer can not know in advance exactly what is necessary to
+expose for an instrumentation.  At the very least, all names should be exposed
+as part of an “instrumentation” interface.  In addition, references should not
+be made via the closure, but indirectly via a “self” object.
+
+The general pattern to apply is then:
+
+#+BEGIN_SRC js
+I = (function(){
+self = {}
+
+self._a = 1
+self._b = 2
+
+self._f = function() { self._a }
+self.g = function() { self._f(self._b) }
+
+return self
+}())
+#+END_SRC
+
+The inner functions are still closures, but this time they close over =self=,
+which is the exported object.  An instrumentation is thus free to change the
+values of =a=, =b=, =f= or =g=.
+
+Which is, actually, quite similar to the more idiomatic:
+
+#+BEGIN_SRC js
+I = new function Interp() {
+  this._a = 1
+  this._b = 2
+
+  this._f = function() { this._a }
+  this.g = function() { this._f(this._b) }
+}
+#+END_SRC
+
+(we don’t need to put the methods on =I.prototype= since we only want one
+interpreter; but we could if we wanted to change the behavior of multiple
+instances of I at once by changing its prototype).
+
+But using =this= will clash with object definitions that are using =this=, like
+=ExecutionContext=.
+
+The downside is that adding =self= on every property is repetitive, and creates
+lot of noise when reading the code.  Essentially, we just want dynamic scoping
+for the variables and functions defined in the module =Narcissus.interpreter=.
+Can’t we just wrap everything in a =with=?
+
+**** Using =with= as a shortcut
+#+BEGIN_SRC js
+  var I = (function(){
+    var I  = {a:null, b:null, f:null, g:null}
+    with(I) {
+      var a = 1
+      var b = 2
+      var f = function f(x) { return x + a }
+      var g = function g() { return f(b) }
+    }
+    return I
+  }())
+
+  print(I.g())
+  I.a = 2
+  print(I.g())
+#+END_SRC
+
+#+RESULTS:
+: 3
+: 4
+: undefined
+
+This how I would write it right away.  By wrapping everything in the module in a
+=with(I)=, we are creating a new scope for =I=, that has the scope of the
+anonymous function as a parent.  Even though =with= introduces a scope, the
+variable declarations are hoisted to the top of the function body, so we have
+the following code:
+
+#+BEGIN_SRC js
+ var I = (function(){
+    var I, a, b, f, g
+    var I  = {a:null, b:null, f:null, g:null}
+    with(I) {
+      a = 1
+      b = 2
+      f = function f(x) { return x + a }
+      g = function g() { return f(b) }
+    }
+    return I
+  }())
+#+END_SRC
+
+Then assignment affects the scope in which a binding is found for the left-hand
+side.  =a= will be found in =I=, so that’s where the =1= will go.  The =a,b,f,g=
+of the anonymous function scope will be left undefined.
+
+Lookup also follows scope, and so =f(b)= will use the bindings inside =I= rather
+than the function scope.
+
+Thus, =I= acts exactly as the anonymous function scope, only we now have access
+to it.
+
+Finally, we return =I= as the exported module object, but we could return an
+“interface” object alongside the instrumentation.
+
+: return {g: g, _instrument: I}
+
+For this to work however, we must put all the dynamic names inside the
+declaration of =I=.  If a name does not appear in this declaration, then
+assignment will fall back to the function scope.
+
+#+BEGIN_SRC js
+  var m = (function(){
+    var I  = {}
+    with(I) {
+      var a = 1
+      var b = 2
+      function f(x) { return x + a }
+      function g() { return f(b) }
+    }
+    return {g:g, _: I}
+  }())
+
+  print(m.g())
+  m._.a = 2
+  print(m.g())
+#+END_SRC
+
+#+RESULTS:
+: 3
+: 4
+: undefined
+
+Leaving =I= empty has the consequence that we can no longer access the values of
+the bindings inside the body of =with=.  However, we can still change their
+meaning dynamically, because we are manipulating the scope introduced by =with=,
+which is inside the function scope.  In addition, the original scope cannot be
+modified; we can always retrieve the original behavior by emptying =I._.I=.
+
+All in all, this pattern allows one to:
+1. Change all binding defined by the module code, as if we had dynamic scoping
+   (though /it is not/ dynamic scoping, see below).
+2. Expose the values of selected bindings by adding them to =I=.
+3. Maintain compatibility with the module pattern: the code inside =with= needs
+   not to be rewritten, and the return object still presents a public interface
+   to the module.
+
+
+This is not dynamic scoping.  In dynamic scoping, bindings are found on the call
+stack.  Here bindings are statically bound to a dynamic object, which can be
+modified at runtime.  But the binding is still static.  As such, we cannot
+manipulate bindings that were not statically bound to the =with= object:
+e.g. the bindings of functions defined outside =with=.
+
+Is =with= safe to put around all your code like that?  Won’t it mess up all your
+scope, and create hard-to-track bugs?
+
+Well, =with= only introduces a scope from an object.  If that object is empty
+(truly empty: no properties or inherited properties), then the scope is empty
+and can have no effect whatsoever on the code it wraps.
+
+Their is no interaction with =var= and =function= to be concerned with.  In the
+following code, all bindings are hoisted to the function scope and not captured
+by =I=.  As we export only =g=, the other bindings are not accessible from an
+instrumentation point of view.
+
+#+BEGIN_SRC js
+  var m = (function(){
+    var I  = Object.create(null)
+    with(I) {
+      var a = 1
+      var b = 2
+      function f(x) { return x + a }
+      function g() { return f(b) }
+    }
+    return {g, _: I}
+  }())
+
+  print(m.g())
+  m._.a = 2
+  print(m.g())
+#+END_SRC
+
+#+RESULTS:
+: 3
+: 4
+: undefined
+
+However, later we can add bindings to =I= that will take precedence over the
+bindings defined in the module.  This is precisely what we want when
+instrumenting.
+
+**** =with= and assignment
+How many ways are there to create bindings inside a =with=?
+
+1. =var a = 0=
+2. =a = 0=
+3. =const a = 0=
+4. =let a = 0=
+5. =function a() {}=
+
+How do they behave when using the ‘within module’ pattern?
+
+***** =var=
+#+BEGIN_SRC js
+var m = (function(){
+  var I = Object.create(null)
+  with(I) { var a = 0 }
+  return {a, _: I}
+}())
+
+print(m.a)
+print(m._.a)
+m._.a = 1
+print(m.a)
+print(m._.a)
+#+END_SRC
+
+#+RESULTS:
+: 0
+: undefined
+: 0
+: 1
+: undefined
+
+=var= is hoisted to the function scope, and known outside =with=.
+
+***** =const=
+#+BEGIN_SRC js
+var m = (function(){
+  var I = Object.create(null)
+  with(I) { const a = 0; print(a) }
+  return { _: I}
+}())
+
+print(m.a)
+print(m._.a)
+m._.a = 1
+print(m.a)
+print(m._.a)
+#+END_SRC
+
+#+RESULTS:
+: 0
+: undefined
+: undefined
+: undefined
+: 1
+: undefined
+
+=const= is not hoisted to the function scope, and is unknown at the time of
+=return=.  It is only known inside =with=, but does not populate =I=.
+
+***** =let=
+#+BEGIN_SRC js
+var m = (function(){
+  var I = Object.create(null)
+  with(I) { let a = 0; print(a) }
+  return {_: I}
+}())
+
+print(m.a)
+print(m._.a)
+m._.a = 1
+print(m.a)
+print(m._.a)
+#+END_SRC
+
+#+RESULTS:
+: 0
+: undefined
+: undefined
+: undefined
+: 1
+: undefined
+
+=let= acts like =const=: known only inside the body of =with=.
+
+***** global
+#+BEGIN_SRC js
+var m = (function(){
+  var I = Object.create(null)
+  with(I) { a = 0 }
+  return {a, _: I}
+}())
+
+print(m.a)
+print(m._.a)
+m._.a = 1
+print(m.a)
+print(m._.a)
+print(a)
+#+END_SRC
+
+#+RESULTS:
+: 0
+: undefined
+: 0
+: 1
+: 0
+: undefined
+
+=a = 0= is a global declaration, since there is no binding for =a= in =I=.
+
+***** =function=
+#+BEGIN_SRC js
+var m = (function(){
+  var I = Object.create(null)
+  with(I) { function a() {} }
+  return {a, _: I}
+}())
+
+print(m.a)
+print(m._.a)
+m._.a = 1
+print(m.a)
+print(m._.a)
+#+END_SRC
+
+#+RESULTS:
+: function a() {}
+: undefined
+: function a() {}
+: 1
+: undefined
+
+A =function= statement declaration is hoisted like a =var=, and hence is known
+outside the body of =with=.
+
+This suggest that we should always put the =return= in the body of =with= to
+avoid surprises with unknown identifiers.  Thus wrapping the whole module
+pattern.
+
+***** Capturing bindings in the scope object
+Rather than letter the bindings be hoisted to function scope, we can declare
+empty bindings in =I=.  Then, =var= and =function= are /still/ hoisted, but
+actual assignments will take place inside =I=.
+
+#+BEGIN_SRC js
+var m = (function(){
+  var I = {a:null}
+  with(I) {
+    var a = 0
+    return {a, _: I}
+  }
+}())
+
+print(m.a)
+print(m._.a)
+m._.a = 1
+print(m.a)
+print(m._.a)
+#+END_SRC
+
+#+RESULTS:
+: 0
+: 0
+: 0
+: 1
+
+This form has two major downsides:
+1. =function= definitions are not captured in =I=.  We have to use the function
+   expression form.
+2. =I= /is/ the scope of the module, and changing a binding in =I= will be
+   irreversible (unless we save them first).
+
+**** Variants of the =with= pattern
+The basic idea of this pattern is to provide a way to override bindings inside
+the module, emulating (a limited form of) dynamic scoping.
+
+For this to work, we only need to wrap all the code of the module in a =with(I)=
+where =I= is an empty object, and export this object.  When a property is later
+added to =I=, a function from the module will pick its bindings from =I= rather
+than from the function scope.
+
+This provides a way for instrumentation to /override/ any binding in the
+module.
+
+#+BEGIN_SRC js
+  var m = (function(){
+    var I  = Object.create(null)
+    with(I) {
+      ...
+      return {... , __: I}
+    }
+  }())
+#+END_SRC
+
+For instrumentation purposes, we also need to /access/ the module bindings.
+This can be done straightforwardly by adding all the bindings to the returned
+object, like in the module pattern.  To avoid clashing with the public
+interface, we can put them in a sub-object.
+
+#+NAME: m
+#+BEGIN_SRC js
+  var m = (function(){
+    var I  = Object.create(null)
+    with(I) {
+      var a = 0
+      function g() { return a }
+      return {g, _: {a} , __: I}
+    }
+  }())
+#+END_SRC
+
+Now we can write code outside the module using the bindings defined inside
+the module.
+
+#+BEGIN_SRC js
+<<m>>
+var f = function() { return m._.a + 1 }
+print(m.g())
+print(f())
+#+END_SRC
+
+#+RESULTS:
+: 0
+: 1
+
+Now, suppose that I want to change the function =g= inside the module with a new
+one.  I can easily do that by defining =g= in the exposed scope object.
+
+#+BEGIN_SRC js
+<<m>>
+m.__.g = function() { return m._.a + 2 }
+print(m.__.g())
+#+END_SRC
+
+#+RESULTS:
+: 2
+
+I can also write the function definition as if I was inside the module since I
+have its scope definition.
+
+#+BEGIN_SRC js
+<<m>>
+m.__.g = function() { with(m._) { return a + 2 }}
+print(m.__.g())
+#+END_SRC
+
+#+RESULTS:
+: 2
+
+But what if I also redefine =a=?  Do I want to use the value of =a= defined by
+the module (in object =m._=), or do I want to use the instrumented value (in
+object =m.__=)?  I can do both by adding another =with=.
+
+#+BEGIN_SRC js
+<<m>>
+m.__.a = 3
+m.__.g = function() { with(m._) { with(m.__) {return a + 2 }}}
+print(m.__.g())
+print(m.g())
+m.__.a = 5
+print(m.__.g())
+print(m.g())
+#+END_SRC
+
+#+RESULTS:
+: 5
+: 3
+: 7
+: 5
+
+First look in the scope =m.__=, then in the scope =m._=.  This allows us to
+change the result of =g= by just changing the binding of =a=.  In fact, if we
+want to define =g= as if it was written inside the module itself, we /need/ to
+provide this exact scope chain.
+
+We can make this pattern shorter by setting =m._= as the prototype of =m.__=.
+Thus, a binding lookup goes first through overrides, then module definitions,
+and then upper scopes.
+
+#+NAME: m-both-scopes
+#+BEGIN_SRC js
+  var m = (function(){
+    var I  = Object.create(null)
+    with(I) {
+      var a = 0
+      function g() { return a }
+      Object.setPrototypeOf(I, {__proto__:null, a})
+      return {g, _: Object.getPrototypeOf(I), __: I}
+    }
+  }())
+#+END_SRC
+
+We must set the prototype *after* all definitions, otherwise the bindings will
+be captured by =I= and not by the function scope.
+
+#+BEGIN_SRC js
+<<m-both-scopes>>
+m.__.g = function() { with(m.__) { return a + 2 }}
+print(m.__.g())
+print(m.g())
+m.__.a = 5
+print(m.__.g())
+print(m.g())
+#+END_SRC
+
+#+RESULTS:
+: 2
+: 0
+: 7
+: 5
+
+If we want, we can also update the public binding of =g= to point to our new
+instrumented version.
+
+#+BEGIN_SRC js
+<<m-both-scopes>>
+m.g = m.__.g = function() { with(m.__) { return a + 2 }}
+print(m.g())
+m.__.a = 5
+print(m.g())
+#+END_SRC
+
+#+RESULTS:
+: 2
+: 7
+
+In fact, the only point of adding =g= to the exposed scope of the module is if
+some other inner function calls =g=.
+
+**** Creating new modules with slight modifications
+In the previous examples, we are able to alter the behavior of an existing
+module.  What if we want to keep this module intact, but define a new one with
+slightly altered behavior?
+
+#+BEGIN_SRC js
+  var m = (function(){
+    var _  = Object.create(null)
+    with(_) {
+      var a = 0
+      function f() { return a }
+      function g() { return f() }
+      return {_, g}
+    }
+  }())
+#+END_SRC
+
+Say, we want a new object that is like =m= except:
+1. that =a= is 1
+2. that =f= returns =a + 10=
+3. that =g= returns =f() + f()=
+
+and leaving =m= unaltered.
+
+If we do not call the IIFE, we get a module constructor, and are then able to
+create multiple copies of the module.  Each copy can be instrumented without
+altering the others.
+
+#+NAME: m-constructor
+#+BEGIN_SRC js
+  var m = function(){
+    var _  = Object.create(null)
+    with(_) {
+      var a = 0
+      function f() { return a }
+      function g() { return f() }
+      Object.setPrototypeOf(_, {__proto__:null, a, f})
+      return {_, g}
+    }
+  }
+#+END_SRC
+
+#+BEGIN_SRC js
+<<m-constructor>>
+var m1 = m()
+m1._.a = 1
+
+print(m1.g())
+
+var m2 = m()
+m2._.f = function() { with(m2._) { return a + 10 }}
+
+print(m2.g())
+
+var m3 = m()
+m3.g = function() { with(m3._) { return f() + f() }}
+
+print(m3.g())
+#+END_SRC
+
+#+RESULTS:
+: 1
+: 10
+: 0
+
+Well, the module pattern is good for singletons, but not for multiple
+instances.  By returning a closure, we are inefficiently creating multiple
+copies of all the functions, and are unable to change them all at once.
+
+Clearly, using inheritance would be a proper solution to this particular problem
+of slight modifications.
+
+**** =eval= can also be used as a shortcut
+=eval= evaluates its argument in the lexical scope it was defined in.  That
+means we can use =eval= to create a “hole” to plug the instrumentation code
+into.
+
+=eval= basically allows us to write code exactly as if we were in the
+jsexec-base file.
+
+However, the rather annoying downside is that we have to quote all the
+instrumentation code to pass it as an argument to =eval=.  This breaks all
+tooling support: syntax highlighting, error highlighting, auto-completion... and
+thus is not an acceptable solution.
+
+** Combining instrumentation layers
+The base layer defines a working JS interpreter.  The facets layer changes the
+semantics of a few bindings, using bindings from the layer below.  The trace
+layer adds debugging output to the layers below
+
+** Why not put everything in the global scope?
+The module pattern seeks to namespace and encapsulate the interpreter.  This
+defeats instrumentation.  By wrapping the body of the IIFE with a =with=, we
+open the scope for instrumentation.  Can’t we achieve the same results by
+simply removing the IIFE?
+
+If we remove the IIFE, the bindings are all in global scope, which is accessible
+to any other script.  It is then easy to change variables or functions.  For
+instrumentation, it is ideal (this is the same situation in Emacs: every
+definition is in global scope).
+
+However, the ‘open scope’ pattern is not equivalent to putting definitions in
+global scope.
+
+1. With an open scope, definitions inside the module are safe: there is no way
+   for other scripts to erase them.  Furthermore, you can always refer to the
+   original definition, whereas in global scope you must take care of backing up
+   original definitions when instrumenting.
+2. With an open scope, you can control which bindings are exposed.  Though
+   exposing everything is better for instrumentation any way (since you cannot
+   predict what will be useful).  In Emacs, namespacing allows you to signal if
+   some definitions are public or internal (i.e., brittle).
+3. With an open scope, deactivating instrumentations is easily done by clearing
+   the exposed scope object.  In a global scope, you must keep track of
+   instrumented bindings, and this for each layer.
+
+So the ‘open scope’ pattern can be slightly more useful depending on what you
+want to achieve, at minimal boilerplate cost.
+
+** Aliasing inside the module is problematic
+For instance, the following line:
+
+: var FOp = FunctionObject.prototype
+
+creates an alias of the prototype property of =FunctionObject=, which is a
+function declared in the module.  If an instrumentation wishes to change the
+binding for =FunctionObject=, it needs also to update the binding for =FOp=.
+
+There is no way to change all the bindings at once, since we are only
+manipulating the references, not the objects they point to.
+
+* Adding the FlowR analysis
+** The behavior of the “default” tag is still unclear
+
+** How to put labels on primitive values? (=undefined=)
+“Every value has a label” works for Ruby, where every value is an object.  In
+JavaScript, we have primitive values, like =undefined=, or =1=, which can be
+returned by different functions, but are still equal.
+
+To add labels on these values, we must be able to distinguish a =1= returned by
+the function =f=, from a =1= returned by =g=, since they can have different
+labels.  To accomplish this distinction, we would need to wrap the return
+values, but in a way that would not break equality; =1 === =1= should still be
+true.
