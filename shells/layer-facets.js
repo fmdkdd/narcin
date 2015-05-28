@@ -1,2 +1,2 @@
 loadRelativeToScript('../facetedValues.js');
-loadRelativeToScript('../narcissus/jsexec-facets.js');
+loadRelativeToScript('../lib/jsexec-facets.js');

@@ -1,2 +1,2 @@
 loadRelativeToScript('./init.js');
-loadRelativeToScript('../narcissus/jsexec-raw.js');
+loadRelativeToScript('../lib/jsexec-raw.js');

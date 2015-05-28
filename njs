@@ -2,7 +2,6 @@
 #
 # Narcissus 'shell' for use with jstests.py
 # Expects to be in the same directory as ./js
-# Expects the Narcissus src files to be in ./narcissus/
 
 import os, re, sys, signal
 from subprocess import *

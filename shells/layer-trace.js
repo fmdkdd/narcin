@@ -1,1 +1,1 @@
-loadRelativeToScript('../narcissus/jsexec-trace.js');
+loadRelativeToScript('../lib/jsexec-trace.js');

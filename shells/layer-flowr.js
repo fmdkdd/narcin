@@ -1,1 +1,1 @@
-loadRelativeToScript('../narcissus/jsexec-flowr.js');
+loadRelativeToScript('../lib/jsexec-flowr.js');

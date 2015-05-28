@@ -1,4 +1,4 @@
-loadRelativeToScript('../narcissus/jsdefs.js');
-loadRelativeToScript('../narcissus/jslex.js');
-loadRelativeToScript('../narcissus/jsparse.js');
-loadRelativeToScript('../narcissus/jsresolve.js');
+loadRelativeToScript('../lib/jsdefs.js');
+loadRelativeToScript('../lib/jslex.js');
+loadRelativeToScript('../lib/jsparse.js');
+loadRelativeToScript('../lib/jsresolve.js');

@@ -1,1 +1,1 @@
-loadRelativeToScript('../narcissus/jsexec-base.js');
+loadRelativeToScript('../lib/jsexec-base.js');
