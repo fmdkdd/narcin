@@ -997,10 +997,13 @@ global scope.
 2. With an open scope, you can control which bindings are exposed.  Though
    exposing everything is better for instrumentation any way (since you cannot
    predict what will be useful).  In Emacs, namespacing allows you to signal if
-   some definitions are public or internal (i.e., brittle).
+   some definitions are public or internal (i.e., brittle), but you can still
+   erase their original meaning.
 3. With an open scope, deactivating instrumentations is easily done by clearing
    the exposed scope object.  In a global scope, you must keep track of
    instrumented bindings, and this for each layer.
+4. The module pattern is already familiar to JavaScript programmers; the ‘open
+   scope’ might be seen as an ‘open module’.
 
 So the ‘open scope’ pattern can be slightly more useful depending on what you
 want to achieve, at minimal boilerplate cost.
@@ -1030,3 +1033,76 @@ the function =f=, from a =1= returned by =g=, since they can have different
 labels.  To accomplish this distinction, we would need to wrap the return
 values, but in a way that would not break equality; =1 === =1= should still be
 true.
+
+* Independent layer activation
+Reminiscent of Context-Oriented Programming.  We can compose instrumentations in
+layers, like a cake.
+
+#+BEGIN_EXAMPLE
+-- base layer (interpreter)
+-- facets instrumentation
+-- trace instrumentation
+#+END_EXAMPLE
+
+In the ‘trace’ use case, we want the calls to =execute= in the facets layer to
+trigger the tracing by using the =execute= binding in the trace layer.  Either
+we write the facets layer to use the =execute= binding of its upper layer, or we
+write it to always use the latest binding, going through all the layers.
+
+In the following example, we use the latter solution.
+
+#+BEGIN_SRC js
+  // Like inserting a node in a singly-linked list
+  function injectProto(o, target) {
+    var ancestor = Object.getPrototypeOf(target)
+    Object.setPrototypeOf(o, ancestor)
+    Object.setPrototypeOf(target, o)
+  }
+
+  function cancelInjection(o, target) {
+
+    while (Object.getPrototypeOf(target) !== o) {
+      target = Object.getPrototypeOf(target)
+    }
+
+    Object.setPrototypeOf(target, Object.getPrototypeOf(o))
+  }
+
+  var m = (function(){
+    var ___ = Object.create(null)
+    with (___) {
+      var a = 1
+      function g() { return a }
+
+      var exports = {__proto__: null, a,g}
+      Object.setPrototypeOf(___, exports)
+      return ___
+    }
+  }())
+
+  print(m.g())
+
+  var instr = {a:2}
+  injectProto(instr, m)
+
+  print(m.g())
+
+  var instr2 = {g() { return m.a + 2 }}
+  injectProto(instr2, m)
+
+  print(m.g())
+
+  cancelInjection(instr, m)
+
+  print(m.g())
+#+END_SRC
+
+#+RESULTS:
+: 1
+: 2
+: 4
+: 3
+
+Two downsides: the dynamic modification of the prototype, and the use of =with=
+make this pattern difficult to optimize.  But we need to see how it affects
+benchmarks.
