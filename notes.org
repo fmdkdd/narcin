@@ -108,6 +108,7 @@ The reification of each switch case to a function is a necessary step.
 =evaluateEach= is used to recursively call the switch case function on each
 facets.  The base case is a raw value.  Since it’s only a branch between raw
 values and faceted values, we can dispatch on the type instead.
+
 * Comparing Narcisuss-base with Narcissus-raw
 The test262 suite does not seem to handle Narcissus correctly.  Even
 Narcissus-raw produces errors that are registered as a passed test.
@@ -1049,6 +1050,8 @@ The base layer defines a working JS interpreter.  The facets layer changes the
 semantics of a few bindings, using bindings from the layer below.  The trace
 layer adds debugging output to the layers below
 
+See [[Independent layer activation]].
+
 ** Why not put everything in the global scope?
 The module pattern seeks to namespace and encapsulate the interpreter.  This
 defeats instrumentation.  By wrapping the body of the IIFE with a =with=, we
@@ -1179,3 +1182,76 @@ In the following example, we use the latter solution.
 Two downsides: the dynamic modification of the prototype, and the use of =with=
 make this pattern difficult to optimize.  But we need to see how it affects
 benchmarks.
+
+* Relation to object-oriented inheritance
+Narcissus was not written following an object-oriented pattern.
+
+But if it were the case, we would have other options for overriding behavior:
+inheritance being the primary choice.
+
+#+BEGIN_SRC js
+  var m = (function(){
+    var scope = Object.create(null)
+    with (scope) {
+      var executeNodes = {}
+
+      function execute(n) {
+        return executeNodes[n.type](n)
+      }
+
+      executeNodes.plus = function(n) { return execute(n.left) + execute(n.right) }
+      executeNodes.num = function(n) { return n.value }
+
+      var exposed = {__proto__:null, execute, executeNodes}
+      Object.setPrototypeOf(scope, exposed)
+      return scope
+    }
+  }())
+
+  var n = {type: 'plus', left: {type: 'num', value: 10}, right: {type: 'num', value: 32}}
+
+  print(m.execute(n)) //: 42
+
+  m.executeNodes = {__proto__: m.executeNodes,
+                    num(n) { return n.value + 10 }}
+
+  print(m.execute(n)) //: 62
+
+  delete m.executeNodes
+
+  print(m.execute(n)) //: 42
+
+
+
+  function I() {}
+  I.prototype.execute = function(n) { return this.executeNodes[n.type].call(this, n) }
+  I.prototype.executeNodes = {
+    plus(n) { return this.execute(n.left) + this.execute(n.right) }
+    ,num(n) { return n.value }
+  }
+
+  var i = new I()
+  print(i.execute(n)) //: 42
+
+  function J() {}
+  J.prototype = Object.create(I.prototype)
+  J.prototype.executeNodes = Object.create(I.prototype.executeNodes)
+  J.prototype.executeNodes.num = function(n) { return n.value + 10 }
+
+  var j = new J()
+  print(j.execute(n)) //: 62
+#+END_SRC
+
+With inheritance, we can create copies of Narcissus with the instrumentation in
+place, without altering the running instances of the base Narcissus.
+
+We could also alter the running instances, by changing the definitions on the
+prototype object directly (and saving them for a later restore); or by mutating
+the prototype.
+
+But then, it’s not quite the same problem: Narcissus is a singleton.
+
+More interesting is the similarity of behavior between the =this= keyword and an
+open scope.  If a binding is prefixed by =this=, it is looked-up in the receiver
+of the method call.  The binding is thus dynamic (even more so in JavaScript,
+where the =this= object can be anything through =apply/call=).
