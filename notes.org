@@ -729,6 +729,79 @@ This form has two major downsides:
 2. =I= /is/ the scope of the module, and changing a binding in =I= will be
    irreversible (unless we save them first).
 
+**** ImplicitThisValue
+=with= can provide a =this= value for functions that exist in its scope object.
+
+#+BEGIN_SRC js
+  var m = (function(){
+      var scope = {f() { return this }}
+      with (scope) {
+          return f()
+      }
+  }())
+
+  print(Object.getOwnPropertyNames(m))
+#+END_SRC
+
+#+RESULTS:
+: f
+
+Which is coherent with the use-case of =with=: avoiding writing the receiver of
+method calls.
+
+So =with= can break functions in the module pattern that used =this= to refer to
+the global scope ...  But that is clearly bad practice, and the chances are, if
+you are using a module pattern, you want to avoid dealing with =this=.
+
+Narcissus only uses =this= for objects defined inside the module
+(ExecutionContext), and thus do not interfere with this usage.
+
+**** Interaction with configurable, enumerable, writable properties
+What happens if you muck with the data descriptor of the binding object?
+
+- Enumerable :: the spec is clear (\sect10.2.1.2), non-enumerable properties can be used as
+                bindings.
+- Writable :: SetMutableBinding (\sect10.2.1.2.3) delegates to the Put internal
+              method, so it obeys the writable property.
+- Configurable :: DeleteBinding (\sect10.2.1.2.5) delegates to the Delete internal
+                  method, and obeys the configurable property.
+
+ Proof:
+#+BEGIN_SRC js
+  var o = Object.create(null)
+  Object.defineProperty(o, 'a', {
+      value: 42,
+      configurable: false,
+      writable: false,
+      enumerable: false
+  })
+
+  ;(function(){
+      with (o) {
+          print(a)
+      }}()) //: 42
+
+  ;(function(){
+      with (o) {
+          a = 12
+          print(a)
+      }}()) //: 42
+
+  ;(function(){
+      with (o) {
+          delete a
+          print(a)
+      }}()) //: 42
+#+END_SRC
+
+#+RESULTS:
+: 42
+: 42
+: 42
+
+A frozen binding object also works.  Though that would not be very useful for
+instrumentation ...
+
 **** Variants of the =with= pattern
 The basic idea of this pattern is to provide a way to override bindings inside
 the module, emulating (a limited form of) dynamic scoping.
