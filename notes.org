@@ -13,6 +13,19 @@ Also desirable:
 - Google Strong mode
 
 * How Narcissus is instrumented for faceted evaluation
+** Diffs
+The diff of jsexec from taustin/narcissus and taustin/ZaphodFacets shows the
+additions made for faceted evaluation.
+
+: git diff --stat --no-index -- narcissus/lib/jsexec.js ZaphodFacets/zaphod/chrome/content/narcissus/jsexec.js
+: 423 insertions(+), 216 deletions(-)
+
+This does not account for the file =facetedValues= with the definitions of
+faceted evaluation used by the instrumentation; another 307 lines.
+
+Roughly, faceted instrumentation is 500 new lines and 200 changes in the base
+code.
+
 ** Extension of ExecutionContext
 The ExecutionContext object is modified to hold the current program counter
 =pc=.
@@ -122,6 +135,12 @@ We should run raw and base on test262, and compare their outputs for each test.
 
 After resolving some bugs (see below), Narcissus-base and Narcissus-raw behave
 *identically* (exact same output from the jstests command above).
+
+: git diff --stat --no-index -- jsexec-raw.js jsexec-base.js
+: 686 insertions(+), 633 deletions(-)
+
+Changes are mostly moving things around; especially extracting functions out of
+the large =switch= case.
 
 ** test262/S11.8.4 A2.2 T1
 Narcissus-raw returns:
@@ -238,6 +257,12 @@ counter is empty.
 After fixing the bugs below, Narcissus-base and Narcissus-facets have
 *identical* output for the test262 suite.
 
+: cat jsexec-facets.js | sed '/^\s*$/d' | wc -l
+: 440
+
+Facets instrumentation has 440 non-blank lines, which is coherent with the
+number of lines changed in the original instrumentation (see [[Diffs]]).
+
 ** Do-while evaluates its condition before the body
 Which does not make any sense under JS semantics, since it breaks a condition
 using side-effects.
@@ -245,8 +270,8 @@ using side-effects.
 The body should be executed once, then we can split the condition if it is a
 faceted value.
 
-For the fix, I rewrote the DO in terms of a WHILE.  Nit: as taught in
-introductory programming classes,
+For the fix, I rewrote the DO in terms of a WHILE.  Nit: contrarily to what is
+taught in introductory programming classes,
 : do <block> while (<cond>)
 
 is not equivalent to
@@ -320,6 +345,9 @@ exception is /not/ an exception.
 
 In this case, =BREAK_SIGNAL= and =CONTINUE_SIGNAL= were undefined, because they
 were not correctly exported from jsexec-base.
+
+Added a catch-all =catch= clause for more helpful error output when throwing
+non-errors.
 
 * Issues
 ** The instrumentation is still not modular
@@ -1098,6 +1126,9 @@ manipulating the references, not the objects they point to.
 
 * Adding the FlowR analysis
 ** The behavior of the “default” tag is still unclear
+But this is only an issue if we want to be accurate in the representation of
+FlowR.  Since we don’t have any tests other than the examples from the paper,
+and they behave correctly ... not more can be done.
 
 ** How to put labels on primitive values? (=undefined=)
 “Every value has a label” works for Ruby, where every value is an object.  In
