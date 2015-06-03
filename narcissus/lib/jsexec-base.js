@@ -313,8 +313,6 @@ Narcissus.interpreter = (function() {
     addHasInstance(URIError);
   }
 
-  // resetEnvironment();
-
   // Helper to avoid Object.prototype.hasOwnProperty polluting scope objects.
   function hasDirectProperty(o, p) {
     return Object.prototype.hasOwnProperty.call(o, p);

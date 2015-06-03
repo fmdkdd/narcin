@@ -216,7 +216,7 @@ Narcissus.interpreter = (function() {
       });
   }
 
-  var hostHandler = definitions .blacklistHandler(
+  var hostHandler = definitions.blacklistHandler(
     hostGlobal, Narcissus.options.hiddenHostGlobals);
   var hostHandlerGet = hostHandler.get;
   hostHandler.get = function(receiver, name) {
@@ -1486,11 +1486,13 @@ Narcissus.interpreter = (function() {
   function test(thunk) {
     try {
       thunk();
-    } catch (e) {
-      // print(e.fileName + ":" + e.lineNumber + ": " + e.name + ": " + e.message);
-      // printStackTrace(e.stack);
+    } catch (e if e instanceof Error) {
+      print(e.fileName + ":" + e.lineNumber + ": " + e.name + ": " + e.message);
+      printStackTrace(e.stack);
       print(e.message);
       return false;
+    } catch (e) {
+      print(e);
     }
     return true;
   }
