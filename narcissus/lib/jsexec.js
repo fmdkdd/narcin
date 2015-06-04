@@ -54,6 +54,7 @@
  * an extra level of prototype-based delegation.
  */
 
+/*global Narcissus, Zaphod, print, putstr, readline, snarf, assertEq, uneval */
 Narcissus.interpreter = (function() {
 
     var parser = Narcissus.parser;
@@ -246,22 +247,22 @@ Narcissus.interpreter = (function() {
     };
 
     // Load missing functions onto Array and String
-    ["concat", "every", "foreach", "isArray", "join", "map", "push", "pop",
-        "reverse", "reduce", "shift", "slice", "sort", "splice",
-        "toLocalString", "unshift"].forEach(function(fName) {
-            definitions.defineProperty(globalBase.Array, fName, Array[fName], false,
-                false, true);
-        });
+    // ["concat", "every", "foreach", "isArray", "join", "map", "push", "pop",
+    //     "reverse", "reduce", "shift", "slice", "sort", "splice",
+    //     "toLocalString", "unshift"].forEach(function(fName) {
+    //         definitions.defineProperty(globalBase.Array, fName, Array[fName], false,
+    //             false, true);
+    //     });
     //["charAt", "charCodeAt", "concat", "fromCharCode", "indexOf",
-    ["concat", "indexOf",
-        "lastIndexOf", "localeCompare", "match", "replace", "search", "slice",
-        "split", "substring", "toLowerCase", "toUpperCase", "trim", "valueOf",
-        //HTML methods
-        "big", "blink", "bold", "fixed", "fontcolor", "fontsize", "italics",
-        "link", "small", "strike", "sub", "sup"].forEach(function(fName) {
-            definitions.defineProperty(globalBase.String, fName, String[fName], false,
-                false, true);
-        });
+    // ["concat", "indexOf",
+    //     "lastIndexOf", "localeCompare", "match", "replace", "search", "slice",
+    //     "split", "substring", "toLowerCase", "toUpperCase", "trim", "valueOf",
+    //     //HTML methods
+    //     "big", "blink", "bold", "fixed", "fontcolor", "fontsize", "italics",
+    //     "link", "small", "strike", "sub", "sup"].forEach(function(fName) {
+    //         definitions.defineProperty(globalBase.String, fName, String[fName], false,
+    //             false, true);
+    //     });
     var oldFCC = String.fromCharCode;
     globalBase.String.fromCharCode = function(v1,v2) {
         x = ExecutionContext.current;
@@ -284,7 +285,7 @@ Narcissus.interpreter = (function() {
     ops[LE] = '<=';
     ops[GE] = '>=';
     ops[GT] = '>';
-    ops[IN] = 'in';
+    ops[IN] = ' in ';
     ops[LSH] = '<<';
     ops[RSH] = '>>';
     ops[URSH] = '>>>';
@@ -437,7 +438,7 @@ Narcissus.interpreter = (function() {
         this.node = node;
     }
 
-    Reference.prototype.toString = function () { return this.node.getSource(); }
+  Reference.prototype.toString = function () { return this.node.getSource(); };
 
     function derefFacetedValue(v, pc) {
         var k = v.label,
@@ -713,9 +714,8 @@ Narcissus.interpreter = (function() {
                 } else {
                     if (!matchDefault)          // not defaulting, skip for now
                         continue;
-                    u = s;                      // force match to do default
                 }
-                if (u === s) {
+                if (matchDefault || u === s) {
                     for (;;) {                  // this loop exits switch_loop
                         if (t.statements.children.length) {
                             try {
@@ -737,7 +737,7 @@ Narcissus.interpreter = (function() {
             n.setup && getValue(execute(n.setup, x), pc);
             // FALL THROUGH
           case WHILE:
-            let whileCond = !n.condition || getValue(execute(n.condition, x), pc);
+            var whileCond = !n.condition || getValue(execute(n.condition, x), pc);
             evaluateEach(whileCond, function(c,x) {
                 while (c) {
                     try {
@@ -783,24 +783,32 @@ Narcissus.interpreter = (function() {
             }
             break;
 
-          case DO:
-            let doWhileCond = !n.condition || getValue(execute(n.condition, x), pc);
-            evaluateEach(doWhileCond, function(c,x) {
-                do {
-                    try {
-                        execute(n.body, x);
-                    } catch (e if e === BREAK_SIGNAL && x.target === n) {
-                        break;
-                    } catch (e if e === CONTINUE_SIGNAL && x.target === n) {
-                        // Must run the update expression.
-                    }
-                    // FIXME: Label might become more secure over time.
-                    c = !n.condition || getValue(execute(n.condition, x), x.pc);
-                    if (c instanceof FacetedValue)
-                        throw new Error('Unhandled case: condition became more secure');
-                } while(c);
-            }, x);
-            break;
+        case DO:
+          try {
+            execute(n.body, x);
+          } catch (e if e === BREAK_SIGNAL && x.target === n) {
+            return; // Skip condition
+          } catch (e if e === CONTINUE_SIGNAL && x.target === n) {
+            // Go on
+          }
+          whileCond = !n.condition || getValue(execute(n.condition, x), pc);
+          evaluateEach(whileCond, function(c,x) {
+            while (c) {
+              try {
+                execute(n.body, x);
+              } catch (e if e === BREAK_SIGNAL && x.target === n) {
+                break;
+              } catch (e if e === CONTINUE_SIGNAL && x.target === n) {
+                // Must run the update expression.
+              }
+              n.update && getValue(execute(n.update, x), x.pc);
+              // FIXME: Label might become more secure over time.
+              c = !n.condition || getValue(execute(n.condition, x), x.pc);
+              if (c instanceof FacetedValue)
+                throw new Error('Unhandled case: condition became more secure');
+            }
+          }, x);
+          break;
 
           case BREAK:
             x.target = n.target;
@@ -933,7 +941,7 @@ Narcissus.interpreter = (function() {
                 u = getValue(r, x.pc);
             v = getValue(execute(c[1], x), x.pc);
             if (t) {
-                v = evalBinOp(u, v, x, ops[t])
+              v = evalBinOp(u, v, x, ops[t]);
             }
             putValue(r, v, c[0], x.pc);
             break;
@@ -1048,7 +1056,7 @@ Narcissus.interpreter = (function() {
           case INCREMENT:
           case DECREMENT:
             t = execute(n.children[0], x);
-            u = getValue(t, pc);
+          u = Number(getValue(t, pc));
             if (n.postfix)
                 v = u;
             u = evaluateEach(u, function(u,x) {
@@ -1510,6 +1518,25 @@ Narcissus.interpreter = (function() {
                                    }, true, true, true);
     }
 
+  // Fp.__hasInstance__ breaks instanceof for the native constructors.  We
+  // restore this functionality.
+  function addHasInstance(target, parent) {
+    if (!parent) parent = target;
+    definitions.defineProperty(target, "__hasInstance__",
+                               function(v) { return v instanceof parent; },
+                               true, true, true);
+  }
+
+  addHasInstance(globalBase.Array, Array);
+  addHasInstance(globalBase.String);
+  addHasInstance(Error);
+  addHasInstance(TypeError);
+  addHasInstance(SyntaxError);
+  addHasInstance(RangeError);
+  addHasInstance(ReferenceError);
+  addHasInstance(EvalError);
+  addHasInstance(URIError);
+
     function thunk(f, x) {
         return function () { return f.__call__(this, arguments, x); };
     }
@@ -1622,7 +1649,7 @@ Narcissus.interpreter = (function() {
         ExecutionContext.current = x;
         for (;;) {
             x.result = undefined;
-            putstr("njs> ");
+            putstr("njs-raw-facets> ");
             var src = readline();
 
             // If readline receives EOF it returns null.
@@ -1666,10 +1693,12 @@ Narcissus.interpreter = (function() {
     function test(thunk) {
         try {
             thunk();
-        } catch (e) {
+        } catch (e if e instanceof Error) {
             print(e.fileName + ":" + e.lineNumber + ": " + e.name + ": " + e.message);
             printStackTrace(e.stack);
             return false;
+        } catch (e) {
+            print(e);
         }
         return true;
     }
