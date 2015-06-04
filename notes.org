@@ -349,6 +349,31 @@ were not correctly exported from jsexec-base.
 Added a catch-all =catch= clause for more helpful error output when throwing
 non-errors.
 
+* Benchmarks
+Running definitive benchmarks for the DLS paper.
+
+Running the test262 suite with one thread and excluding the tests that Narcissus
+fails.
+
+: jstests.py --xul-info:: --worker-count 1 --exclude-file=/home/fmarch12/Archimède/Thèse/lab/narcin/failure-raw-262 JS test262
+
+Running the raw-facets version.
+
+: ./jstests.py --xul-info=:: -j 1 --exclude-file=/home/fmarch12/Archimède/Thèse/lab/narcin/failure-raw-262 ~/Archimède/Thèse/lab/narcin/narcissus/njs --args='-F /home/fmarch12/Archimède/Thèse/lab/narcin/narcissus/shells/raw-facets.js' test262
+
+Running the base + facets version.
+
+: ./jstests.py --xul-info=:: -j 1 --exclude-file=/home/fmarch12/Archimède/Thèse/lab/narcin/failure-raw-262 ~/Archimède/Thèse/lab/narcin/narcissus/njs --args='-l base -l facets' test262
+
+| Interpreter     | time (seconds) |
+|-----------------+----------------|
+| Spidermonkey    |           87.8 |
+| raw             |         1167.1 |
+| base            |         1409.5 |
+|-----------------+----------------|
+| facets (Austin) |         1232.9 |
+| facets (us)     |         1356.6 |
+
 * Issues
 ** The instrumentation is still not modular
 Fixing the infinite loop in switch should not require a change to njs-facets.
