@@ -1149,6 +1149,16 @@ binding for =FunctionObject=, it needs also to update the binding for =FOp=.
 There is no way to change all the bindings at once, since we are only
 manipulating the references, not the objects they point to.
 
+** Performance loss using =with=
+=with= is a dynamic construct, since the binding object can evolve dynamically.
+
+However, could we extend the module system for composing instrumentation layers
+statically, and avoid a performance cost?
+
+Otherwise there is the refactoring that puts =self.= in front of every binding
+declared and used inside the module.  If it can be done statically, then it
+would be equivalent to =with=, without (presumably!) the performance overhead.
+
 * Adding the FlowR analysis
 ** The behavior of the “default” tag is still unclear
 But this is only an issue if we want to be accurate in the representation of
