@@ -352,6 +352,7 @@ non-errors.
 * Benchmarks
 Running definitive benchmarks for the DLS paper.
 
+** Time to test262
 Running the test262 suite with one thread and excluding the tests that Narcissus
 fails.
 
@@ -365,14 +366,66 @@ Running the base + facets version.
 
 : ./jstests.py --xul-info=:: -j 1 --exclude-file=/home/fmarch12/Archimède/Thèse/lab/narcin/failure-raw-262 ~/Archimède/Thèse/lab/narcin/narcissus/njs --args='-l base -l facets' test262
 
-| Interpreter     | time (seconds) |
-|-----------------+----------------|
-| Spidermonkey    |           87.8 |
-| raw             |         1167.1 |
-| base            |         1409.5 |
-|-----------------+----------------|
-| facets (Austin) |         1232.9 |
-| facets (us)     |         1356.6 |
+Times are in seconds.  First row are initial measurements.  Second group are
+measurements made to measure variance between runs.
+
+| Interpreter | Spidermonkey |    Raw |   Base | Facets (Austin) | Facets (us) |
+|-------------+--------------+--------+--------+-----------------+-------------|
+| 1 run       |         87.8 | 1167.1 | 1409.5 |          1232.9 |      1197.5 |
+|-------------+--------------+--------+--------+-----------------+-------------|
+| 5 runs      |         89.2 | 1041.8 | 1185.7 |                 |             |
+|             |         88.6 | 1044.4 | 1197.5 |                 |             |
+|             |           88 | 1048.5 | 1200.6 |                 |             |
+|             |         86.3 | 1050.7 | 1198.6 |                 |             |
+|             |         87.9 |        | 1199.3 |                 |             |
+|-------------+--------------+--------+--------+-----------------+-------------|
+| Total       |              |        |        |                 |             |
+
+Seems there are some wild variations.  Better run the benchmarks a few times to
+get an average and variance.
+
+: for i in (seq 10); ./jstests.py --xul-info=:: -j 1 --exclude-file=/home/fmarch12/Archimède/Thèse/lab/narcin/failure-raw-262 ~/Archimède/Thèse/lab/narcin/narcissus/njs --args='-l base' test262; end
+
+** Octane benchmarks
+Octane benchmarks offer a different view on performance.
+
+Unfortunately, Narcissus is not a full JS interp, so half the benchmarks fail.
+Also, is a score difference of 0.6 points significant?  Is a difference of 60
+points significant?  I’d rather stick to time measurements.
+
+| Bench           | Spidermonkey |  Raw |  Base | Facets (Austin) | Facets (us) |
+|-----------------+--------------+------+-------+-----------------+-------------|
+| Richards        |        24019 | 1.47 | 0.817 |            1.08 |       0.950 |
+| DeltaBlue       |        28576 | 1.44 | 0.856 |            1.18 |       0.948 |
+| Crypto          |        24633 | 1.42 | 0.859 |           0.814 |       0.882 |
+| RayTrace  | EarleyBoyer     |        18821 | 5.19 |  3.18 |            3.94 |        3.42 |
+| RegExp          |         2895 | 5.36 |  3.59 |            3.89 |        4.00 |
+| Splay           |        14872 | 14.6 |  7.99 |            10.3 |        8.70 |
+| SplayLatency    |        16708 |  143 |  80.2 |             102 |        85.5 |
+| NavierStokes    |        34280 |  ERR |   ERR |             ERR |         ERR |
+| PdfJS           |        11739 |  ERR |   ERR |             ERR |         ERR |
+| Mandreel        |        24394 |  ERR |   ERR |             ERR |         ERR |
+| MandreelLatency |        26377 |  ERR |   ERR |             ERR |         ERR |
+| Gameboy         |        45499 | 11.3 |  6.15 |            7.25 |        7.57 |
+| CodeLoad        |        15502 |  235 |   228 |             222 |         244 |
+| Box2D           |        33107 |  ERR |   ERR |             ERR |         ERR |
+| zlib            |        66907 |  ERR |   ERR |             ERR |         ERR |
+| Typescript      |        18549 |  ERR |   ERR |             ERR |         ERR |
+|-----------------+--------------+------+-------+-----------------+-------------|
+| Score           |        22625 |      |       |                 |             |
+
+Octane benchmarks are in mozilla-central/js/src/octane.  To run, just
+
+: js -f run.js
+
+To run all Narcissus-based interpreters overnight:
+
+#+BEGIN_SRC shell
+~/Archimède/Thèse/lab/narcin/narcissus/njs -f run.js;
+~/Archimède/Thèse/lab/narcin/narcissus/njs -l base -f run.js;
+~/Archimède/Thèse/lab/narcin/narcissus/njs -l base -l facets -f run.js;
+~/Archimède/Thèse/lab/narcin/narcissus/njs -F /home/fmarch12/Archimède/Thèse/lab/narcin/narcissus/shells/raw-facets.js -f run.js
+#+END_SRC
 
 * Issues
 ** The instrumentation is still not modular
