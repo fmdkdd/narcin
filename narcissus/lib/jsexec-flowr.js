@@ -94,7 +94,7 @@
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // FlowR main algorithm
 
-  // Need to capture function call.  This is done in FunctionObjct.prototype.
+  // Need to capture function call.  This is done in FunctionObject.prototype.
   // We could just change __call__ in the base interpreter, but it is cleaner to
   // add a new FunctionObject in the instrumentation scope, since it can be
   // toggled off easily by deleting this property.
