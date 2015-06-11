@@ -1151,6 +1151,20 @@ instrumentation code to pass it as an argument to =eval=.  This breaks all
 tooling support: syntax highlighting, error highlighting, auto-completion... and
 thus is not an acceptable solution.
 
+**** If we cannot change =getValue=, make it extensible
+We opened =ExecutionContext= by adding hooks, and made =executeNode= accept
+overrides.  =getValue= could be opened in the same way.
+
+Basically, either we modify a binding to add a hook, thus leaving a door open to
+instrumentation, or we make all the references to the binding indirect.
+
+The latter leads to open scope, at is makes all references indirect without
+refactoring the code manually.  The former is too case-specific.
+
+AOP gives you hooks without modifying the code itself.  Since the binding is
+hidden in the closure, the joinpoint must be captured using the function name.
+Overriding a value becomes messier.  =with= provides an easy and standard backdoor.
+
 ** Combining instrumentation layers
 The base layer defines a working JS interpreter.  The facets layer changes the
 semantics of a few bindings, using bindings from the layer below.  The trace
