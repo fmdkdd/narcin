@@ -1182,6 +1182,52 @@ AOP gives you hooks without modifying the code itself.  Since the binding is
 hidden in the closure, the joinpoint must be captured using the function name.
 Overriding a value becomes messier.  =with= provides an easy and standard backdoor.
 
+**** Using =Symbol= for added niceties
+We can use =Symbol= from ES6 to provide the scope without risk of clashing with
+the public interface.
+
+#+BEGIN_SRC js
+var m = (function(){
+  var scope = Object.create(null)
+  with (scope) {
+    var a = 1
+    var f = function(x) { return x + a }
+    var g = function(x) { return f(x) }
+    return {g, [Symbol.for("scope")]: scope}
+  }
+}())
+
+var scope = Symbol.for("scope")
+m.g(0) //: 1
+m[scope].a = 2
+m.g(0) //: 2
+#+END_SRC
+
+And we can also use the =Symbol.unscopables= global symbol as another way to
+prevent bindings to be overridden.
+
+#+BEGIN_SRC js
+var m = (function(){
+  var scope = Object.create(null)
+  with (scope) {
+    var a = 1
+    var f = function(x) { return x + a }
+    var g = function(x) { return f(x) }
+    return {g, [Symbol.for("scope")]: scope}
+  }
+}())
+
+var scope = Symbol.for("scope")
+m.g(0) //: 1
+m[scope].a = 2
+m.g(0) //: 2
+m[scope][Symbol.unscopables] = {a:true}
+m.g(0) //: 1
+#+END_SRC
+
+Though it seems less flexible than a Proxy (it’s just a blacklist), it’s also
+simpler.
+
 ** Combining instrumentation layers
 The base layer defines a working JS interpreter.  The facets layer changes the
 semantics of a few bindings, using bindings from the layer below.  The trace
