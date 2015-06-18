@@ -1243,6 +1243,15 @@ Otherwise there is the refactoring that puts =self.= in front of every binding
 declared and used inside the module.  If it can be done statically, then it
 would be equivalent to =with=, without (presumably!) the performance overhead.
 
+** Not working in V8
+See https://code.google.com/p/v8/issues/detail?id=686
+
+It seems that the behavior of =with= in this case is left unspecified by the
+spec.  Brendan Eich comments on the thread to say that the way Firefox
+implements it is compatible with Harmony.
+
+In V8, a workaround is to use a function expression instead of a declaration.
+
 * Adding the FlowR analysis
 ** The behavior of the “default” tag is still unclear
 But this is only an issue if we want to be accurate in the representation of
