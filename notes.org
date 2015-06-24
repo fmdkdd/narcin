@@ -1228,6 +1228,22 @@ m.g(0) //: 1
 Though it seems less flexible than a Proxy (it’s just a blacklist), it’s also
 simpler.
 
+*** Instrumentation can silently conflict
+We are just redefining property names.  Even in the layered approach, it’s easy
+to produce a completely broken interpreter without any warning.
+
+It’s relatively easy for me to debug conflicts as the designer of all
+instrumentation layers, but with several layers by different authors, some help
+from the system would be preferable.
+
+A low-cost solution would be to warn in case of multiple redefinition of the
+same property when layers are combined.  There would be false positives (e.g.,
+layers overriding =execute= in compatible ways), and false negatives (e.g.,
+a layer fiddling with the =pc= of =ExecutionContext=).
+
+But first we would need to find convincing use cases of multiple layers and
+actual conflicts.
+
 ** Combining instrumentation layers
 The base layer defines a working JS interpreter.  The facets layer changes the
 semantics of a few bindings, using bindings from the layer below.  The trace
