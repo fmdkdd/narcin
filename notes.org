@@ -1331,6 +1331,29 @@ labels.  To accomplish this distinction, we would need to wrap the return
 values, but in a way that would not break equality; =1 === =1= should still be
 true.
 
+* Scope analysis
+** =with= creates a temporary scope
+without creating a new execution context.  Same thing for
+=executeNode[FUNCTION]=.  How to grab those scope objects?
+
+Making =ExecutionContext.scope= trigger an accessor function?
+
+Well, we can hook into every =execute= call and just put the collected scope
+objects in a set.
+
+** A couple of examples
+[[file:narcissus/tests/module.js]] and [[file:narcissus/tests/with.js]] are examples of
+using the scope analysis to generate the diagrams of the DLS paper.
+
+Example call:
+: ./njs -l base -l scope -f tests/module.js | dot -Tpng | feh -
+
+Depth, blacklists and whitelists are useful for controlling the size of the
+graph, as it can get quite large (over 1000 nodes) otherwise.
+
+See [[file:large-heap-graph.svg]].  Best viewer seems to be Chrome, but even that is
+pretty slow.
+
 * Independent layer activation
 Reminiscent of Context-Oriented Programming.  We can compose instrumentations in
 layers, like a cake.
