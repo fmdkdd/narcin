@@ -1313,6 +1313,32 @@ spec.  Brendan Eich comments on the thread to say that the way Firefox
 implements it is compatible with Harmony.
 
 In V8, a workaround is to use a function expression instead of a declaration.
+But this does not seem to work for overriding functions.
+
+#+BEGIN_SRC nodejs
+  var m = (function(){
+    var scope = {}
+    with (scope) {
+      var a = 1
+      function f() { return a }
+      var g = function() { return a }
+      function h() { return g() }
+      return {f, g, h, scope}
+    }
+  }())
+
+  console.log(m.f(), m.g(), m.h())
+  m.scope.a = 2
+  console.log(m.f(), m.g(), m.h())
+  m.scope.g = function() { return 42 }
+  console.log(m.f(), m.g(), m.h())
+  m.scope.f = function() { return 42 }
+#+END_SRC
+
+#+RESULTS:
+: 1 1 1
+: 1 2 2
+: 1 2 2
 
 * Adding the FlowR analysis
 ** The behavior of the “default” tag is still unclear
