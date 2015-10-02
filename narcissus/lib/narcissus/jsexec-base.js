@@ -54,7 +54,10 @@
 
 /*global Narcissus, print, putstr, readline, snarf, assertEq, uneval */
 Narcissus.interpreter = (function() {
-  var ___ = {};
+
+  // Create empty scope object for extensions.  Use a variable name that is
+  // unlikely to conflict.
+  var ___ = Object.create(null);
   with (___) {
 
   var parser = Narcissus.parser;
@@ -1526,6 +1529,26 @@ Narcissus.interpreter = (function() {
     return true;
   }
 
+  // Expose functions on the returned scope object
+    Object.setPrototypeOf(___,
+      {__proto__: null,
+       ExecutionContext,
+       getCurrentExecutionContext,
+       getValue,
+       Reference,
+       FunctionObject,
+       executeNode,
+       execute,
+       global,
+       globalBase,
+       isObject,
+       toObject,
+       isPrimitive,
+       Activation,
+       BREAK_SIGNAL,
+       CONTINUE_SIGNAL,
+      })
+
   return {
     // resetEnvironment wipes any properties added externally to global,
     // but properties added to globalBase will persist.
@@ -1538,28 +1561,9 @@ Narcissus.interpreter = (function() {
     repl,
     test,
 
-    // Exposed functions
-    // FIXME: Should be everything
-    _: {ExecutionContext,
-        getCurrentExecutionContext,
-        getValue,
-        Reference,
-        FunctionObject,
-        executeNode,
-        execute,
-        global,
-        globalBase,
-        isObject,
-        toObject,
-        isPrimitive,
-        Activation,
-        BREAK_SIGNAL,
-        CONTINUE_SIGNAL
-       },
-
     // Instrumentation scope
     ___
   };
 
-  } // End of with(I)
+  } // End of with(___)
 }());

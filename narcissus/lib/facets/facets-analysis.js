@@ -8,7 +8,7 @@
   eval(definitions.consts);
 
   // Exposed bindings from the interpreter
-  let _ = interpreter._;
+  let ___ = interpreter.___;
 
   // Faceted Value utilities
   let FacetedValue     = Zaphod.facets.FacetedValue;
@@ -27,15 +27,16 @@
   // Re-use the existing program counter when one exists, or create
   // one from scratch.
 
+  var EC = ___.ExecutionContext;
   function ExecutionContext(type, version) {
-    _.ExecutionContext.call(this, type, version);
+    EC.apply(this, arguments);
 
     this.pc = getPC() || new ProgramCounter();
   }
-  ExecutionContext.prototype = Object.create(_.ExecutionContext.prototype);
+  ExecutionContext.prototype = Object.create(EC.prototype);
 
   function getPC() {
-    var x = _.getCurrentExecutionContext();
+    var x = ___.getCurrentExecutionContext();
     return x && x.pc;
   }
 
@@ -46,9 +47,9 @@
   // is exposed to target scripts.  To rebuild the global object, call
   // Narcissus.interpreter.resetEnvironment.
 
-  // We create a new globalBase that inherits from the original one, and will
-  // replace it in its scope.
-  var globalBase = Object.create(_.globalBase);
+  // We create a new globalBase that will inherit from the original one with
+  // i13n.delegate.
+  var globalBase = {};
 
   globalBase.cloak = v => {
     // In Zaphod, sticking with a 2-element lattice
@@ -92,7 +93,7 @@
     var newStr = evaluateEach(s, function(s,x) {
       // Called as function or constructor: convert argument to string type.
       return (argSpecified ? "" + s : "");
-    }, _.getCurrentExecutionContext());
+    }, ___.getCurrentExecutionContext());
 
     if (this instanceof String) {
       // Called as constructor: save the argument as the string value
@@ -101,7 +102,7 @@
       var strlen = evaluateEach(newStr, function(s,x) {
         // Called as function or constructor: convert argument to string type.
         return s ? s.length : 0;
-      }, _.getCurrentExecutionContext());
+      }, ___.getCurrentExecutionContext());
       definitions.defineProperty(this, 'length', strlen, true,
                                  true, true);
       return this;
@@ -109,14 +110,14 @@
     else return newStr;
   };
 
-  var oldFCC = String.fromCharCode;
-  globalBase.String.fromCharCode = function(v1,v2) {
-    var x = _.getCurrentExecutionContext();
-    return evaluateEachPair(v1, v2, function(v1,v2,x) {
-      if (v2) return oldFCC(v1,v2);
-      else return oldFCC(v1);
-    }, x);
-  };
+  globalBase.String.fromCharCode =
+    i13n.around(String.fromCharCode, function(proceed, v1,v2) {
+      var x = ___.getCurrentExecutionContext();
+      return evaluateEachPair(v1, v2, function(v1,v2,x) {
+        if (v2) return proceed(v1,v2);
+        else return proceed(v1);
+      }, x);
+    });
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // Utils for executeNode.
@@ -178,7 +179,7 @@
     }
   }
 
-  function getValue(v, pc) {
+  var getValue = i13n.around(___.getValue, function(proceed, v, pc) {
     // PC is undefined if getValue was called from interpreter, without the
     // additional argument.
     if (pc == null)
@@ -188,8 +189,8 @@
       return derefFacetedValue(v, pc);
     }
 
-    return _.getValue(v);
-  }
+    return proceed(v);
+  });
 
   function putValue(v, w, vn, pc) {
     // PC is undefined if getValue was called from interpreter, without the
@@ -204,9 +205,9 @@
         return putValue(ref, val, x.vn, x.pc);
       }, {pc: pc, vn: vn});
     }
-    else if (v instanceof _.Reference) {
+    else if (v instanceof ___.Reference) {
       //return (v.base || global)[v.propertyName] = w;
-      var base = v.base || _.global;
+      var base = v.base || ___.global;
       var oldVal = base[v.propertyName];
       var newVal = base[v.propertyName] = buildVal(pc, w, oldVal);
       // The returned value should be the local version, not the stored
@@ -226,32 +227,32 @@
   // value, if it is a FacetedValue; this is done by wrapping the original
   // behavior of executeNode in an evaluateEach call.
 
-  var executeNode = Object.create(_.executeNode);
+  var executeNode = {};
 
   executeNode[IF] = function(n, x) {
-    let cond = getValue(_.execute(n.condition, x), x.pc);
+    let cond = getValue(___.execute(n.condition, x), x.pc);
     evaluateEach(cond, function(v, x) {
       if (v)
-        _.execute(n.thenPart, x);
+        ___.execute(n.thenPart, x);
       else if (n.elsePart)
-        _.execute(n.elsePart, x);
+        ___.execute(n.elsePart, x);
     }, x);
   };
 
   executeNode[WHILE] = function(n, x) {
-    let whileCond = !n.condition || getValue(_.execute(n.condition, x), x.pc);
+    let whileCond = !n.condition || getValue(___.execute(n.condition, x), x.pc);
     evaluateEach(whileCond, (c,x) => {
       while (c) {
         try {
-          _.execute(n.body, x);
-        } catch (e if e === _.BREAK_SIGNAL && x.target === n) {
+          ___.execute(n.body, x);
+        } catch (e if e === ___.BREAK_SIGNAL && x.target === n) {
           break;
-        } catch (e if e === _.CONTINUE_SIGNAL && x.target === n) {
+        } catch (e if e === ___.CONTINUE_SIGNAL && x.target === n) {
           // Must run the update expression.
         }
-        n.update && getValue(_.execute(n.update, x), x.pc);
+        n.update && getValue(___.execute(n.update, x), x.pc);
         // FIXME: Label might become more secure over time.
-        c = !n.condition || getValue(_.execute(n.condition, x), x.pc);
+        c = !n.condition || getValue(___.execute(n.condition, x), x.pc);
         if (c instanceof FacetedValue)
           throw new Error('Unhandled case: condition became more secure');
       }
@@ -260,12 +261,12 @@
 
   executeNode[ASSIGN] = function(n, x) {
     let c = n.children;
-    let r = _.execute(c[0], x);
+    let r = ___.execute(c[0], x);
     let t = n.assignOp;
     let u;
     if (t)
       u = getValue(r, x.pc);
-    let v = getValue(_.execute(c[1], x), x.pc);
+    let v = getValue(___.execute(c[1], x), x.pc);
     if (t) {
       v = evalBinOp(u, v, x, t);
     }
@@ -275,20 +276,20 @@
 
   executeNode[HOOK] = function(n, x) {
     let c = n.children;
-    let t = getValue(_.execute(c[0], x), x.pc);
+    let t = getValue(___.execute(c[0], x), x.pc);
     let v = evaluateEach(t, (t,x) => {
-      return t ? getValue(_.execute(c[1], x), x.pc)
-        : getValue(_.execute(c[2], x), x.pc);
+      return t ? getValue(___.execute(c[1], x), x.pc)
+        : getValue(___.execute(c[2], x), x.pc);
     }, x);
     return v;
   };
 
   executeNode[OR] = function(n, x) {
     let c = n.children;
-    let v = getValue(_.execute(c[0], x), x.pc);
+    let v = getValue(___.execute(c[0], x), x.pc);
 
     v = evaluateEach(v, (v1, x) => {
-      return v1 || getValue(_.execute(c[1], x), x.pc);
+      return v1 || getValue(___.execute(c[1], x), x.pc);
     }, x);
 
     return v;
@@ -296,10 +297,10 @@
 
   executeNode[AND] = function(n, x) {
     let c = n.children;
-    let v = getValue(_.execute(c[0], x), x.pc);
+    let v = getValue(___.execute(c[0], x), x.pc);
 
     v = evaluateEach(v, (v1, x) => {
-      return v1 && getValue(_.execute(c[1], x), x.pc);
+      return v1 && getValue(___.execute(c[1], x), x.pc);
     }, x);
 
     return v;
@@ -328,8 +329,8 @@
     executeNode[MOD] =
     function(n, x) {
       let c = n.children;
-      let v1 = getValue(_.execute(c[0], x), x.pc);
-      let v2 = getValue(_.execute(c[1], x), x.pc);
+      let v1 = getValue(___.execute(c[0], x), x.pc);
+      let v2 = getValue(___.execute(c[1], x), x.pc);
       return evalBinOp(v1, v2, x, n.type);
     };
 
@@ -339,16 +340,16 @@
     executeNode[UNARY_MINUS] =
     function(n, x) {
       let c = n.children;
-      let v = getValue(_.execute(c[0], x), x.pc);
+      let v = getValue(___.execute(c[0], x), x.pc);
       return evalUnaryOp(v, x, n.type);
     };
 
   executeNode[INSTANCEOF] = function(n, x) {
     let c = n.children;
-    let t = getValue(_.execute(c[0], x), x.pc);
-    let u = getValue(_.execute(c[1], x), x.pc);
+    let t = getValue(___.execute(c[0], x), x.pc);
+    let u = getValue(___.execute(c[1], x), x.pc);
     return evaluateEachPair(t, u, (t, u, pc) => {
-      if (_.isObject(u) && typeof u.__hasInstance__ === "function")
+      if (___.isObject(u) && typeof u.__hasInstance__ === "function")
         return u.__hasInstance__(t);
       else
         return t instanceof u;
@@ -356,16 +357,16 @@
   };
 
   executeNode[DELETE] = function(n, x) {
-    let t = _.execute(n.children[0], x);
+    let t = ___.execute(n.children[0], x);
     return evaluateEach(t, (t,x) => {
-      return !(t instanceof _.Reference) || delete t.base[t.propertyName];
+      return !(t instanceof ___.Reference) || delete t.base[t.propertyName];
     }, x);
   };
 
   executeNode[TYPEOF] = function(n, x) {
-    let t = _.execute(n.children[0], x);
+    let t = ___.execute(n.children[0], x);
     return evaluateEach(t, (t,x) => {
-      if (t instanceof _.Reference)
+      if (t instanceof ___.Reference)
         t = t.base ? t.base[t.propertyName] : undefined;
       return typeof t;
     }, x);
@@ -374,7 +375,7 @@
   executeNode[INCREMENT] =
     executeNode[DECREMENT] =
     function(n, x) {
-      let t = _.execute(n.children[0], x);
+      let t = ___.execute(n.children[0], x);
       let u = Number(getValue(t, x.pc));
       let v;
       if (n.postfix)
@@ -390,36 +391,36 @@
 
   executeNode[DOT] = function(n, x) {
     let c = n.children;
-    let r = _.execute(c[0], x);
+    let r = ___.execute(c[0], x);
     let t = getValue(r, x.pc);
     return evaluateEach(t, (t,x) => {
       let u = c[1].value;
-      return new _.Reference(_.toObject(t, r, c[0]), u, n);
+      return new ___.Reference(___.toObject(t, r, c[0]), u, n);
     }, x);
   };
 
   executeNode[INDEX] = function(n, x) {
     let c = n.children;
-    let r = _.execute(c[0], x);
+    let r = ___.execute(c[0], x);
     let t = getValue(r, x.pc);
-    let u = getValue(_.execute(c[1], x), x.pc);
+    let u = getValue(___.execute(c[1], x), x.pc);
     return evaluateEachPair(t, u, function(t, u) {
-      return new _.Reference(_.toObject(t, r, c[0]), String(u), n);
+      return new ___.Reference(___.toObject(t, r, c[0]), String(u), n);
     }, x);
   };
 
   executeNode[CALL] = function(n, x) {
     let c = n.children;
-    let r = _.execute(c[0], x);
-    let a = _.execute(c[1], x);
+    let r = ___.execute(c[0], x);
+    let a = ___.execute(c[1], x);
     let f = getValue(r, x.pc);
     return evaluateEachPair(f, r, (f, r, x) => {
       x.staticEnv = n.staticEnv;
-      if (_.isPrimitive(f) || typeof f.__call__ !== "function") {
+      if (___.isPrimitive(f) || typeof f.__call__ !== "function") {
         throw new TypeError(r + " is not callable", c[0].filename, c[0].lineno);
       }
-      let t = (r instanceof _.Reference) ? r.base : null;
-      if (t instanceof _.Activation)
+      let t = (r instanceof ___.Reference) ? r.base : null;
+      if (t instanceof ___.Activation)
         t = null;
       return f.__call__(t, a, x);
     }, x);
@@ -429,17 +430,17 @@
     executeNode[NEW] =
     function(n, x) {
       let c = n.children;
-      let r = _.execute(c[0], x);
+      let r = ___.execute(c[0], x);
       let f = getValue(r, x.pc);
       let a;
       if (n.type === NEW) {
         a = {};
         definitions.defineProperty(a, "length", 0, false, false, true);
       } else {
-        a = _.execute(c[1], x);
+        a = ___.execute(c[1], x);
       }
       return evaluateEach(f, (f,x) => {
-        if (_.isPrimitive(f) || typeof f.__construct__ !== "function") {
+        if (___.isPrimitive(f) || typeof f.__construct__ !== "function") {
           throw new TypeError(r + " is not a constructor",
                               c[0].filename, c[0].lineno);
         }
@@ -481,21 +482,13 @@
   // Instrument the interpreter by overriding the following bindings with our
   // own versions.
 
-  // Instrumentation scope
-  let instrument = interpreter.___;
-
-  instrument.ExecutionContext = ExecutionContext;
-  instrument.getValue = getValue;
-  instrument.putValue = putValue;
-  instrument.executeNode = executeNode;
-  instrument.globalBase = globalBase;
-  instrument.FpCall = FpCall;
-
-
-  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // Change prompt
-
-  instrument.repl_prompt = "njs-facets> ";
+  i13n.pushLayer(___, {
+    ExecutionContext,
+    getValue,
+    putValue,
+    executeNode: i13n.delegate(___.executeNode, executeNode),
+    globalBase: i13n.delegate(___.globalBase, globalBase),
+  });
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // Add exports to Narcissus.interpreter.

@@ -7,7 +7,7 @@
   eval(definitions.consts);
 
   // Exposed bindings from the interpreter
-  let _ = interpreter._;
+  let ___ = interpreter.___;
 
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -85,13 +85,6 @@
   }
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // Extensions to global object
-
-  let globalBase = Object.create(_.globalBase);
-
-  globalBase.setTag = setTag;
-
-  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // FlowR main algorithm
 
   // Need to capture function call.  This is done in FunctionObject.prototype.
@@ -99,16 +92,16 @@
   // add a new FunctionObject in the instrumentation scope, since it can be
   // toggled off easily by deleting this property.
 
-  function FunctionObject() {
-    return _.FunctionObject.apply(this, arguments);
+  var FO = ___.FunctionObject;
+  function FunctionObject(...args) {
+    return FO.apply(this, args);
   }
-
-  FunctionObject.prototype = Object.create(_.FunctionObject.prototype);
+  FunctionObject.prototype = Object.create(FO.prototype);
 
   // On function call, execute FlowR algorithm.
   FunctionObject.prototype.__call__ = function(t, a, x) {
     let caller = x;
-    let receiver = t || _.global;
+    let receiver = t || ___.global;
     let method = this;
     let args = a;
 
@@ -118,7 +111,7 @@
     propagate(caller, receiver);
     for (i=0; i < args.length; ++i)
       propagate(args[i], receiver);
-    let ret = _.FunctionObject.prototype.__call__.apply(this, arguments);
+    let ret = FO.prototype.__call__.apply(this, arguments);
     propagate(method, ret);
     check(ret, caller);
     propagate(ret, caller);
@@ -129,12 +122,9 @@
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // Instrumentation of Narcissus.interpreter
 
-  let instrument = interpreter.___;
+  i13n.pushLayer(___, {
+    FunctionObject,
+    globalBase: i13n.delegate(___.globalBase, {setTag})
+  })
 
-  instrument.FunctionObject = FunctionObject;
-  instrument.globalBase = globalBase;
-
-  // Change prompt
-
-  instrument.repl_prompt = "njs-flowr> ";
 }());

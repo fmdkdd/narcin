@@ -1,4 +1,4 @@
 loadRelativeToScript('./init.js');
-loadRelativeToScript('./layer-base.js');
-loadRelativeToScript('./layer-facets.js');
+loadRelativeToScript('./layers/base.js');
+loadRelativeToScript('./layers/facets.js');
 loadRelativeToScript('./lock-env.js');

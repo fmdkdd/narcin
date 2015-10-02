@@ -1,3 +1,3 @@
 loadRelativeToScript('./init.js');
-loadRelativeToScript('./layer-base.js');
+loadRelativeToScript('./layers/base.js');
 loadRelativeToScript('./lock-env.js');

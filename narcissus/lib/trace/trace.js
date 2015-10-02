@@ -7,7 +7,7 @@
   eval(definitions.consts);
 
   // Exposed bindings from the interpreter
-  let _ = interpreter._;
+  let ___ = interpreter.___;
 
   let nodetypesToNames = Object.keys(definitions.tokenIds);
 
@@ -15,36 +15,30 @@
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // Utils
 
+  let indentation = 0;
+  let indentationStep = 2;
+
   function printIndentation(indent) {
     while (indent-- > 0) putstr(' ');
   }
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // Additions to the global object.
+  // Extensions
 
-  let globalBase = Object.create(_.globalBase);
-
-  globalBase.print = function() {
+  function printStdout(...args) {
     printIndentation(indentation);
     putstr('#output ');
-    print.apply(this, arguments);
-  };
-
-
-  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // Overriding of execute.
-
-  let indentation = 0;
-  let indentationStep = 2;
+    print(...args);
+  }
 
   // FIXME: traces the base layer correctly, but facets call the original
   // execute, not the instrumented version.
-  function execute(n, x) {
+  function execute(proceed, n, x) {
     printIndentation(indentation);
     print(nodetypesToNames[n.type]);
 
     indentation += indentationStep;
-    let ret = _.execute(n, x);
+    let ret = proceed(n, x);
     indentation -= indentationStep;
 
     return ret;
@@ -54,12 +48,9 @@
   // Instrument the interpreter by overriding the following bindings with our
   // own versions.
 
-  let instrument = interpreter.___;
+  i13n.pushLayer(___, {
+    execute: i13n.around(___.execute, execute),
+    globalBase: i13n.delegate(___.globalBase, {print}),
+  });
 
-  instrument.execute = execute;
-  instrument.globalBase = globalBase;
-
-  // Change prompt
-
-  instrument.repl_prompt = "njs-trace> ";
 }());

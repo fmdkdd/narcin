@@ -1,4 +1,4 @@
-#+PROPERTY: header-args :results output :noweb yes
+#+PROPERTY: header-args :results output stderr :noweb yes
 
 Instrumenting Narcissus for dynamic analyses in an elegant way.
 
@@ -1310,7 +1310,9 @@ See https://code.google.com/p/v8/issues/detail?id=686
 
 It seems that the behavior of =with= in this case is left unspecified by the
 spec.  Brendan Eich comments on the thread to say that the way Firefox
-implements it is compatible with Harmony.
+implements it is compatible with Harmony.  Since the comment is from 2010, it
+might be that things have changed since.  I have no EcmaScript 2015-compliant
+implementation to test.
 
 In V8, a workaround is to use a function expression instead of a declaration.
 But this does not seem to work for overriding functions.
@@ -1322,7 +1324,7 @@ But this does not seem to work for overriding functions.
       var a = 1
       function f() { return a }
       var g = function() { return a }
-      function h() { return g() }
+      function h() { with(scope){return g()} }
       return {f, g, h, scope}
     }
   }())
@@ -1338,7 +1340,7 @@ But this does not seem to work for overriding functions.
 #+RESULTS:
 : 1 1 1
 : 1 2 2
-: 1 2 2
+: 1 2 42
 
 * Adding the FlowR analysis
 ** The behavior of the “default” tag is still unclear
@@ -1377,7 +1379,7 @@ Example call:
 Depth, blacklists and whitelists are useful for controlling the size of the
 graph, as it can get quite large (over 1000 nodes) otherwise.
 
-See [[file:large-heap-graph.svg]].  Best viewer seems to be Chrome, but even that is
+See [[large-heap-graph.svg][large heap graph SVG]].  Best viewer seems to be Chrome, but even that is
 pretty slow.
 
 * Independent layer activation
@@ -1525,3 +1527,92 @@ More interesting is the similarity of behavior between the =this= keyword and an
 open scope.  If a binding is prefixed by =this=, it is looked-up in the receiver
 of the method call.  The binding is thus dynamic (even more so in JavaScript,
 where the =this= object can be anything through =apply/call=).
+* Overriding objects
+Overriding functions and values works great with ~with~.  However, when
+overriding objects, I often find myself delegating to the existing object:
+
+#+BEGIN_SRC js
+  var m = (function(){
+    var scope = {}
+    with (scope) {
+      var obj = {a: 2, b:4}
+      function f() { return obj.a + obj.b }
+      Object.setPrototypeOf(scope, {obj})
+      return {f, scope}
+    }
+  }())
+
+  print(m.f())
+  m.scope.obj = {b:12}
+  print(m.f())
+  m.scope.obj = Object.create(m.scope.__proto__.obj)
+  m.scope.obj.b = 12
+  print(m.f())
+#+END_SRC
+
+#+RESULTS:
+: 6
+: NaN
+: 14
+
+In the value case, one has no choice but erasing it.  In the function case, we
+may want only change a tiny bit of it, and we can delegate to the original
+function (as in ~proceed~).  In the object case, overriding only a few values
+is a legitimate scenario.  Maybe we can provide a ~replace~ function which does
+the intuitive thing in all these scenarios?
+
+#+BEGIN_SRC js
+/** Create a replacement of object O by object R.
+ ,*
+ ,*  If O is a function, return a function that will call R with the O as first
+ ,*  argument, followed by the original arguments of the call.
+ ,*
+ ,*  If O is an object, return a new object containing the properties of R, but
+ ,*  with O as prototype.
+,*/
+function replacement(o, r) {
+  if (typeof o === "function") {
+    return function(...args) {
+      replacement(o, ...args)
+    }
+  }
+
+  else if (typeof o === 'object') {
+    var n = Object.create(o)
+    Object.assign(n, r)
+    return n
+  }
+
+  else
+    return r
+}
+
+  var m = (function(){
+    var scope = {}
+    with (scope) {
+      var obj = {a: 2, b:4}
+      function f() { return obj.a + obj.b }
+      Object.setPrototypeOf(scope, {obj})
+      return {f, scope}
+    }
+  }())
+
+  print(m.f())
+  m.scope.obj = {b:12}
+  print(m.f())
+  m.scope.obj = replacement(m.scope.__proto__.obj, {b:12})
+  print(m.f())
+#+END_SRC
+
+#+RESULTS:
+: 6
+: NaN
+: 14
+
+I’ve resolved to use a simpler scheme: helper functions for exactly what you
+mean.  See [[file:narcissus/lib/i13n.js][i13n.js]]
+
+
+
+* Cleaning the code for uploading
+On https://github.com/open-scope/open-scope, for double-blind reviewing purposes.

@@ -9,9 +9,10 @@ from optparse import OptionParser
 
 THIS_DIR = os.path.dirname(__file__)
 SHELL_DIR = os.path.abspath(os.path.join(THIS_DIR, 'shells'))
-DEFAULT_SHELL = os.path.abspath(os.path.join(SHELL_DIR, 'raw.js'))
-LAYER_INIT = os.path.abspath(os.path.join(SHELL_DIR, 'init.js'))
-LAYER_LOCK_ENV = os.path.abspath(os.path.join(SHELL_DIR, 'lock-env.js'))
+LAYER_DIR = os.path.join(SHELL_DIR, 'layers')
+DEFAULT_SHELL = os.path.join(SHELL_DIR, 'raw.js')
+LAYER_INIT = os.path.join(SHELL_DIR, 'init.js')
+LAYER_LOCK_ENV = os.path.join(SHELL_DIR, 'lock-env.js')
 
 
 if 'NJS_SHELL' in os.environ:
@@ -31,7 +32,7 @@ if __name__ == '__main__':
     op.add_option('-f', '--file', dest='js_files', action='append',
             help='JS file to load in Narcissus', metavar='FILE')
     op.add_option('-F', '--file-meta', dest='js_files_meta', action='append',
-                  help='JS file to load before executing Narcissus', metavar='FILE')
+            help='JS file to load before executing Narcissus', metavar='FILE')
     op.add_option('-e', '--expression', dest='js_exps', action='append',
             help='JS expression to evaluate')
     op.add_option('-i', '--interactive', dest='js_interactive', action='store_true',
@@ -49,7 +50,7 @@ if __name__ == '__main__':
     op.add_option('-d', '--desugar', dest='js_desugar', action='store_true',
             help='desugar SpiderMonkey language extensions')
     op.add_option('-l', '--layer', dest='js_layers', action='append',
-            help='Layers to load (facets, flowr, trace)')
+            help='Layers to load (facets, flowr, trace, scope)')
 
     (options, args) = op.parse_args()
 
@@ -89,9 +90,9 @@ if __name__ == '__main__':
 
     if options.js_layers:
         argv += ['-f', LAYER_INIT]
-        argv += ['-f', os.path.join(SHELL_DIR, 'layer-base.js')]
+        argv += ['-f', os.path.join(LAYER_DIR, 'base.js')]
         for file in options.js_layers:
-            argv += ['-f', (os.path.join(SHELL_DIR, 'layer-' + file + '.js'))]
+            argv += ['-f', (os.path.join(LAYER_DIR, file + '.js'))]
         argv += ['-f', LAYER_LOCK_ENV]
 
     if not options.js_files_meta and not options.js_layers:

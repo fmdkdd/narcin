@@ -1,5 +1,9 @@
-loadRelativeToScript('../lib/jsdefs.js');
-loadRelativeToScript('../lib/jslex.js');
-loadRelativeToScript('../lib/jsparse.js');
-loadRelativeToScript('../lib/jsresolve.js');
-loadRelativeToScript('../lib/jsdecomp.js');
+// Narcissus
+loadRelativeToScript('../lib/narcissus/jsdefs.js');
+loadRelativeToScript('../lib/narcissus/jslex.js');
+loadRelativeToScript('../lib/narcissus/jsparse.js');
+loadRelativeToScript('../lib/narcissus/jsresolve.js');
+loadRelativeToScript('../lib/narcissus/jsdecomp.js');
+
+// Instrumentation helpers
+loadRelativeToScript('../lib/i13n.js');

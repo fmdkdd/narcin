@@ -6,9 +6,11 @@
   // Import constants in scope
   eval(definitions.consts);
 
-  // Exposed bindings from the interpreter
-  let _ = interpreter._;
+  // Exposed scope from the interpreter
+  let ___ = interpreter.___;
 
+  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  // Definitions for scope analysis
 
   let scopeObjects = new Set();
 
@@ -67,15 +69,18 @@
     }
   }
 
-  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // Additions to global object
-
-  let globalBase = Object.create(_.globalBase);
-
-  globalBase.printScope = function printScope(depth, whitelist, blacklist) {
+  // Export the graph of collected heap objects in the DOT format.  DEPTH is
+  // the number of links to follows to discover objects in the graph from
+  // collected scope objects.  WHITELIST is a Map of objects to property
+  // names.  When an object is collected and if it is present in the
+  // whitelist, only its whitelisted properties will be explored further.
+  // BLACKLIST is a Map of objects to object names.  Blacklisted objects won't
+  // have their properties explored, regardless of the depth parameter.  The
+  // name value is used for presenting them in the DOT output.
+  function printScope(depth, whitelist, blacklist) {
     depth = depth || 1;
     whitelist = whitelist || new Map();
-    blacklist = blacklist || new Set();
+    blacklist = blacklist || new Map();
     constructGraph(depth, whitelist, blacklist);
 
     print('digraph {');
@@ -134,24 +139,23 @@
     });
 
     print('}');
-  };
+  }
 
-  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // New executeNode, FunctionObject
-
-  let executeNode = Object.create(_.executeNode);
-
-  function execute(n, x) {
+  function harvestScopeObject(n, x) {
     scopeObjects.add(x.scope);
-    return _.execute(n, x);
   }
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // Instrument the interpreter
+  // Instrument the interpreter with new bindings
 
-  let instrument = interpreter.___;
+  i13n.pushLayer(___, {
 
-  instrument.execute = execute;
-  instrument.globalBase = globalBase;
+    // Every time `execute` is called, collect the scope object.  This is
+    // sufficient to construct the heap graph.
+    execute: i13n.before(___.execute, harvestScopeObject),
+
+    // Make `printScope` available in the global scopeObjects
+    globalBase: i13n.delegate(___.globalBase, {printScope}),
+  });
 
 }());
