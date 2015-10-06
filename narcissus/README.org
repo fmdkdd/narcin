@@ -49,7 +49,7 @@ For instance, to run the faceted evaluation analysis:
 
 : ./njs -l facets -f tests/fenton.js
 
-For the [[??][FlowR analysis]]:
+For the [[http://dl.acm.org/citation.cfm?doid=2577080.2577090][FlowR analysis]]:
 
 : ./njs -l flowr -f tests/flowr.js
 
