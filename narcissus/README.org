@@ -1,29 +1,29 @@
 * Narcissus with Open Scope pattern
 This repository applies the pattern described in the paper “Open Scope: A
 Pragmatic JavaScript Pattern for Extensible Interpreters” (under submission) to
-the JavaScript interpreter [[Narcissus][Narcissus]].
+the JavaScript interpreter [[https://github.com/mozilla/narcissus][Narcissus]].
 
 ** Structure of the repository
-The code for the base interpreter is located in =/lib/narcissus=.  In it, the
-two files of interests are =jsexec-raw.js= and =jsexec-base.js=.  The former is
-the original version of Narcissus, and the latter is the same module, but with
-the “open scope pattern” applied to allow extension.
+The code for the base interpreter is located in [[lib/narcissus]].  In it, the two
+files of interests are [[lib/narcissus/jsexec-raw.js][jsexec-raw.js]] and [[lib/narcissus/jsexec-base.js][jsexec-base.js]].  The former is the
+original version of Narcissus, and the latter is the same module, but with the
+“open scope pattern” applied to allow extension.
 
 Other folders in =/lib/= contain the code for dynamic analyses and variants of
 the interpreter.  These make use of the open scope pattern to extend the
 interpreter without modifying its code.
 
-The file =/lib/facets/jsexec-facets.js= contains the instrumented version of
-=jsexec= with the faceted evaluation analysis, from [[austin/narcissus]].
+The file [[lib/facets/jsexec-facets.js][lib/facets/jsexec-facets.js]] contains the instrumented version of
+=jsexec= with the faceted evaluation analysis, from [[https://github.com/taustin/narcissus/][taustin/narcissus]].
 
-The file =/lib/i13n.js= (/instrumentation/) contains utilities that help writing
+The file [[lib/i13n.js][lib/i13n.js]] (/instrumentation/) contains utilities that help writing
 the analyses.
 
-The file =njs= is a Python script bundled with Narcissus that processes
+The file [[njs]] is a Python script bundled with Narcissus that processes
 command-line options and bootstraps the interpreter using the files in
-=/shells=.
+[[shells]].
 
-Some toy examples are provided under =/tests=.
+Some toy examples are provided under [[tests]].
 
 ** Requirements
 To run Narcissus, you need to install the JavaScript interpreter [[https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey][SpiderMonkey]].
@@ -58,8 +58,8 @@ see the generated diagrams, pipe it to ~dot~ (and an eventual image viewer):
 
 : ./njs -l scope -f tests/module.js | dot -Tpng | feh -
 
-You can tweak the depth of the generated diagram.  See =tests/module.js= for an
-example, and =lib/scope/scope-analysis.js= for the documentation.  Beware that
+You can tweak the depth of the generated diagram.  See [[tests/module.js]] for an
+example, and [[lib/scope/scope-analysis.js]] for the documentation.  Beware that
 generated diagrams can be quite large if depth has a seemingly-small value
 like 3.
 
