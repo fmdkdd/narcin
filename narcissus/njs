@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 #
 # Narcissus 'shell' for use with jstests.py
 # Expects to be in the same directory as ./js
@@ -21,7 +21,7 @@ else:
     js_cmd = os.path.abspath(os.path.join(THIS_DIR, 'js'))
 
 def handler(signum, frame):
-    print ''
+    print('')
     # the exit code produced by ./js on SIGINT
     sys.exit(130)
 
