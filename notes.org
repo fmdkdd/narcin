@@ -1615,4 +1615,7 @@ mean.  See [[file:narcissus/lib/i13n.js][i13n.js]]
 
 
 * Cleaning the code for uploading
-On https://github.com/open-scope/open-scope, for double-blind reviewing purposes.
+On https://github.com/open-scope/open-scope, for double-blind reviewing
+purposes.
+
+As the reviews are done, the github account is now deleted.
