@@ -2,6 +2,7 @@
   let Narcissus = this.Narcissus;
   let interpreter = Narcissus.interpreter;
   let definitions = Narcissus.definitions;
+  let decompiler = Narcissus.decompiler;
 
   // Import constants in scope
   eval(definitions.consts);
@@ -22,6 +23,30 @@
     while (indent-- > 0) putstr(' ');
   }
 
+  function nodeInfo(n) {
+    var name = nodetypesToNames[n.type]
+
+    switch (n.type) {
+
+    case VAR:
+    case ASSIGN:
+    case CALL:
+    case DOT:
+      return `${name} ${decompiler.pp(n).replace(/[\n\t]/g, ' ')}`
+
+    case FUNCTION:
+      return `${name} ${n.name}(${n.params})`
+
+    case IDENTIFIER:
+    case NUMBER:
+    case STRING:
+      return `${name} ${n.value}`
+
+    default:
+      return name
+    }
+  }
+
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // Extensions
 
@@ -33,7 +58,7 @@
 
   function execute(proceed, n, x) {
     printIndentation(indentation);
-    print(nodetypesToNames[n.type]);
+    print(nodeInfo(n));
 
     indentation += indentationStep;
     let ret = proceed(n, x);
