@@ -18,8 +18,8 @@ var i13n = (function() {
     }
   }
 
-  //  Return a new object containing the properties of R, and with O as
-  //  prototype.
+  // Return a new object containing the properties of R, and with O as
+  // prototype.
   function delegate(o, r) {
     var n = Object.create(o)
     Object.assign(n, r)
