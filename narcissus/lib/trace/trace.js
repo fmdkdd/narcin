@@ -31,8 +31,6 @@
     print(...args);
   }
 
-  // FIXME: traces the base layer correctly, but facets call the original
-  // execute, not the instrumented version.
   function execute(proceed, n, x) {
     printIndentation(indentation);
     print(nodetypesToNames[n.type]);
