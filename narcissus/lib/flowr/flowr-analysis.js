@@ -87,19 +87,8 @@
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // FlowR main algorithm
 
-  // Need to capture function call.  This is done in FunctionObject.prototype.
-  // We could just change __call__ in the base interpreter, but it is cleaner to
-  // add a new FunctionObject in the instrumentation scope, since it can be
-  // toggled off easily by deleting this property.
-
-  var FO = ___.FunctionObject;
-  function FunctionObject(...args) {
-    return FO.apply(this, args);
-  }
-  FunctionObject.prototype = Object.create(FO.prototype);
-
   // On function call, execute FlowR algorithm.
-  FunctionObject.prototype.__call__ = function(t, a, x) {
+  function flowrCall(__call__, t, a, x) {
     let caller = x;
     let receiver = t || ___.global;
     let method = this;
@@ -111,20 +100,20 @@
     propagate(caller, receiver);
     for (i=0; i < args.length; ++i)
       propagate(args[i], receiver);
-    let ret = FO.prototype.__call__.apply(this, arguments);
+    let ret = __call__.call(this, t, a, x);
     propagate(method, ret);
     check(ret, caller);
     propagate(ret, caller);
 
     return ret;
-  };
+  }
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // Instrumentation of Narcissus.interpreter
 
   i13n.pushLayer(___, {
-    FunctionObject,
-    globalBase: i13n.delegate(___.globalBase, {setTag})
+    FunctionObject: i13n.override(___.FunctionObject, {__call__: flowrCall}),
+    globalBase: i13n.delegate(___.globalBase, {setTag}),
   })
 
 }());

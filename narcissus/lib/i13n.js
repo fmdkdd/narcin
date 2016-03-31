@@ -7,14 +7,14 @@ var i13n = (function() {
   // passed to FN.
   function before(fn, b) {
     return function(...args) {
-      b(...args);
-      return fn(...args);
+      b.call(this, ...args);
+      return fn.call(this, ...args);
     }
   }
 
   function around(fn, a) {
     return function(...args) {
-      return a(fn, ...args);
+      return a.call(this, fn, ...args);
     }
   }
 
@@ -24,6 +24,22 @@ var i13n = (function() {
     var n = Object.create(o)
     Object.assign(n, r)
     return n
+  }
+
+  // Return a new function constructor which delegates to BASE, and whose
+  // prototype property also delegates to BASE.prototype.  In addition, the
+  // functions in the METHODS array are assigned to the new constructor
+  // prototype, and will be called with the method of BASE.prototype of the same
+  // name as first argument.
+  function override(base, methods) {
+    var newConstr = function(...args) { return base.apply(this, args) }
+
+    for (var m in methods)
+      methods[m] = around(base.prototype[m], methods[m])
+
+    newConstr.prototype = delegate(base.prototype, methods)
+
+    return newConstr
   }
 
   function pushLayer(o, l) {
@@ -53,6 +69,7 @@ var i13n = (function() {
     before,
     around,
     delegate,
+    override,
     pushLayer,
     removeLayer,
   }
