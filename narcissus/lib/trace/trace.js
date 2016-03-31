@@ -73,7 +73,7 @@
 
   i13n.pushLayer(___, {
     execute: i13n.around(___.execute, execute),
-    globalBase: i13n.delegate(___.globalBase, {print}),
+    globalBase: i13n.delegate(___.globalBase, {print: printStdout}),
   });
 
 }());
